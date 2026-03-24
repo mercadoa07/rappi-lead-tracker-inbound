@@ -5,13 +5,14 @@ import { formatDistanceToNow, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   Clock, AlertTriangle, CheckCheck, Check, Eye, BellOff, Loader2,
-  UserPlus, TrendingDown, CalendarX, Activity, FileWarning,
+  UserPlus, TrendingDown, CalendarX, Activity, FileWarning, UserCheck, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { alertsApi } from '../services/api'
+import { alertsApi, reassignApi, profilesApi } from '../services/api'
 import { useAlertCount } from '../hooks/useAlertCount'
+import { useAuth } from '../context/AuthContext'
 import { cn } from '../utils/cn'
-import type { Alert, FunnelStage } from '../types'
+import type { Alert, FunnelStage, User } from '../types'
 
 // ─── Stage badge ──────────────────────────────────────────────────────────────
 
@@ -121,19 +122,141 @@ function AlertTypeIcon({ type, unread }: { type: Alert['type']; unread: boolean 
   )
 }
 
+// ─── Quick reassign modal ─────────────────────────────────────────────────────
+
+const REASSIGNABLE_TYPES: Alert['type'][] = [
+  'SIN_PROXIMO_CONTACTO_3D', 'SIN_AVANCE_5D', 'ESPERANDO_DOCS_7D',
+]
+
+function QuickReassignModal({
+  alert,
+  onClose,
+}: {
+  alert:   Alert
+  onClose: () => void
+}) {
+  const queryClient          = useQueryClient()
+  const { user }             = useAuth()
+  const [toUserId, setToUserId] = useState('')
+  const [reason, setReason]     = useState('')
+
+  const { data: hunters = [], isLoading: loadingHunters } = useQuery<User[]>({
+    queryKey: ['hunters-for-reassign', user?.id],
+    queryFn:  () => profilesApi.getHunters({ leaderId: user?.role === 'LIDER' ? user.id : undefined }),
+  })
+
+  const mutation = useMutation({
+    mutationFn: () => reassignApi.reassignLead(alert.leadId, toUserId, reason || undefined),
+    onSuccess: () => {
+      toast.success('Lead reasignado correctamente')
+      queryClient.invalidateQueries({ queryKey: ['alerts'] })
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+      onClose()
+    },
+    onError: () => toast.error('Error al reasignar el lead'),
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <UserCheck size={20} className="text-primary" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900">Reasignar lead</h3>
+              {alert.lead?.name && (
+                <p className="text-sm text-gray-400 truncate max-w-[240px]">{alert.lead.name}</p>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Hunter picker */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
+            Asignar a
+          </label>
+          {loadingHunters ? (
+            <div className="h-10 bg-gray-100 rounded-xl animate-pulse" />
+          ) : (
+            <select
+              value={toUserId}
+              onChange={(e) => setToUserId(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+            >
+              <option value="">Seleccionar hunter...</option>
+              {hunters.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.fullName} — {h.country}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Reason */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
+            Motivo <span className="text-gray-400 normal-case font-normal">(opcional)</span>
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            placeholder="Ej: Sin actividad por 5 días, se reasigna para mantener momentum..."
+            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="flex-1 h-10 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => mutation.mutate()}
+            disabled={!toUserId || mutation.isPending}
+            className="flex-1 h-10 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {mutation.isPending && <Loader2 size={14} className="animate-spin" />}
+            Reasignar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Alert card ───────────────────────────────────────────────────────────────
 
 function AlertCard({
   alert,
   onMarkRead,
   isMarking,
+  onReassign,
 }: {
-  alert:      Alert
-  onMarkRead: (id: string) => void
-  isMarking:  boolean
+  alert:       Alert
+  onMarkRead:  (id: string) => void
+  isMarking:   boolean
+  onReassign?: (alert: Alert) => void
 }) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const unread   = !alert.isRead
+  const canReassign = onReassign
+    && REASSIGNABLE_TYPES.includes(alert.type)
+    && (user?.role === 'LIDER' || user?.role === 'ADMIN')
 
   return (
     <div
@@ -181,7 +304,16 @@ function AlertCard({
       </div>
 
       {/* Right: actions */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+        {canReassign && (
+          <button
+            onClick={() => onReassign!(alert)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary hover:text-white transition-colors whitespace-nowrap"
+          >
+            <UserCheck size={13} />
+            Reasignar
+          </button>
+        )}
         {alert.lead?.id && (
           <button
             onClick={() => navigate(`/leads/${alert.lead!.id}`)}
@@ -257,7 +389,8 @@ function EmptyState() {
 
 export default function AlertsPage() {
   const queryClient = useQueryClient()
-  const [markingId, setMarkingId] = useState<string | null>(null)
+  const [markingId, setMarkingId]         = useState<string | null>(null)
+  const [reassignAlert, setReassignAlert] = useState<Alert | null>(null)
 
   const {
     data: alerts = [],
@@ -297,12 +430,20 @@ export default function AlertsPage() {
   const unread    = useMemo(() => allAlerts.filter((a) => !a.isRead), [allAlerts])
   const read      = useMemo(() => allAlerts.filter((a) =>  a.isRead), [allAlerts])
 
-  const handleMarkOne = (id: string) => markOneMutation.mutate(id)
-  const handleMarkAll = () => markAllMutation.mutate()
+  const handleMarkOne  = (id: string) => markOneMutation.mutate(id)
+  const handleMarkAll  = () => markAllMutation.mutate()
+  const handleReassign = (alert: Alert) => setReassignAlert(alert)
 
   const isEmpty = !isLoading && !isError && allAlerts.length === 0
 
   return (
+    <>
+    {reassignAlert && (
+      <QuickReassignModal
+        alert={reassignAlert}
+        onClose={() => setReassignAlert(null)}
+      />
+    )}
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
@@ -376,6 +517,7 @@ export default function AlertsPage() {
                     alert={alert}
                     onMarkRead={handleMarkOne}
                     isMarking={markOneMutation.isPending && markingId === alert.id}
+                    onReassign={handleReassign}
                   />
                 ))}
               </div>
@@ -416,5 +558,6 @@ export default function AlertsPage() {
         </div>
       )}
     </div>
+    </>
   )
 }

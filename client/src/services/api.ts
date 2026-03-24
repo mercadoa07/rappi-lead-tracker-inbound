@@ -3,7 +3,7 @@ import { supabase, supabaseAdmin } from '../lib/supabase'
 import { STAGE_TRANSITIONS } from '../utils/constants'
 import type {
   Lead, ContactAttempt, StageHistory, Alert, FunnelStage,
-  ContactResult, Country, LeadSource, User,
+  ContactResult, Country, LeadSource, User, Reassignment,
   TeamSummaryResponse, ClosedRateEntry, HcSummaryEntry,
 } from '../types'
 
@@ -58,6 +58,7 @@ export function mapLead(row: any): Lead {
     bloqueado:             row.bloqueado           ?? false,
     negociacionExitosa:    row.negociacion_exitosa ?? false,
     ultimaFechaContacto:   row.ultima_fecha_contacto ?? undefined,
+    reassignmentCount:     row.reassignment_count   ?? 0,
     isDeleted:             row.is_deleted          ?? false,
     createdAt:             row.created_at,
     updatedAt:             row.updated_at,
@@ -476,6 +477,77 @@ export const reportsApi = {
     })
     if (error) throw error
     return data
+  },
+}
+
+// ─── reassignApi ──────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapReassignment(row: any): Reassignment {
+  return {
+    id:             row.id,
+    leadId:         row.lead_id,
+    fromUserId:     row.from_user_id    ?? undefined,
+    fromUserName:   row.from_profile?.full_name ?? undefined,
+    toUserId:       row.to_user_id,
+    toUserName:     row.to_profile?.full_name   ?? undefined,
+    reason:         row.reason          ?? undefined,
+    reassignedById: row.reassigned_by_id,
+    reassignedAt:   row.reassigned_at,
+  }
+}
+
+export const reassignApi = {
+  reassignLead: async (
+    leadId:    string,
+    toUserId:  string,
+    reason?:   string,
+  ): Promise<void> => {
+    const { data: session } = await supabase.auth.getUser()
+    const userId = session.user?.id
+    if (!userId) throw new Error('Not authenticated')
+
+    // Obtener el hunter actual
+    const { data: lead, error: leadErr } = await supabase
+      .from('leads')
+      .select('assigned_to_id')
+      .eq('id', leadId)
+      .single()
+    if (leadErr) throw leadErr
+
+    // Actualizar lead
+    const { error: updateErr } = await supabase
+      .from('leads')
+      .update({ assigned_to_id: toUserId, assigned_at: new Date().toISOString() })
+      .eq('id', leadId)
+    if (updateErr) throw updateErr
+
+    // Registrar en historial de reasignaciones
+    const { error: insertErr } = await supabase
+      .from('reassignments')
+      .insert({
+        lead_id:          leadId,
+        from_user_id:     lead.assigned_to_id ?? null,
+        to_user_id:       toUserId,
+        reason:           reason ?? null,
+        reassigned_by_id: userId,
+        reassigned_at:    new Date().toISOString(),
+      })
+    if (insertErr) throw insertErr
+  },
+
+  getByLead: async (leadId: string): Promise<Reassignment[]> => {
+    const { data, error } = await supabase
+      .from('reassignments')
+      .select(`
+        *,
+        from_profile:profiles!reassignments_from_user_id_fkey(full_name),
+        to_profile:profiles!reassignments_to_user_id_fkey(full_name)
+      `)
+      .eq('lead_id', leadId)
+      .order('reassigned_at', { ascending: false })
+    if (error) throw error
+    return (data ?? []).map(mapReassignment)
   },
 }
 

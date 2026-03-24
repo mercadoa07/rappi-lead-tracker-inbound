@@ -9,11 +9,11 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { leadsApi, contactsApi, stageApi } from '../services/api'
+import { leadsApi, contactsApi, stageApi, reassignApi } from '../services/api'
 import { cn } from '../utils/cn'
 import { STAGE_LABEL, STAGE_COLORS, STAGE_TRANSITIONS, COUNTRY_FLAG, BLOCKED_STAGES } from '../utils/constants'
 import { useAuth } from '../context/AuthContext'
-import type { Lead, ContactAttempt, StageHistory, FunnelStage, LeadSource } from '../types'
+import type { Lead, ContactAttempt, StageHistory, FunnelStage, LeadSource, Reassignment } from '../types'
 import type { ContactResult, ContactMethod } from '../types'
 
 // ─── Local label helpers ──────────────────────────────────────────────────────
@@ -22,10 +22,12 @@ const STAGE_LABEL_FULL: Record<FunnelStage, string> = {
   SIN_CONTACTO:                 'Sin Contacto',
   CONTACTO_FALLIDO:             'Contacto Fallido',
   CONTACTO_EFECTIVO:            'Contacto Efectivo',
-  OK_R2S:                       'OK R2S',
-  ESPERANDO_DOCUMENTOS:         'Esperando Documentos',
-  OB:                           'OB',
+  EN_GESTION:                   'En Gestión',
   PROPUESTA_ENVIADA:            'Propuesta Enviada',
+  ESPERANDO_DOCUMENTOS:         'Esperando Documentos',
+  EN_FIRMA:                     'En Firma',
+  OB:                           'OB',
+  OK_R2S:                       'OK R2S',
   VENTA:                        'Venta',
   BLOQUEADO_NO_INTERESA:        'Bloq. No Interesa',
   BLOQUEADO_IMPOSIBLE_CONTACTO: 'Bloq. Imposible Contacto',
@@ -61,6 +63,8 @@ function stageBadgeClass(stage: FunnelStage): string {
   if (stage === 'CONTACTO_EFECTIVO') return 'bg-blue-50 text-blue-700 border-blue-200'
   if (stage === 'CONTACTO_FALLIDO')  return 'bg-orange-50 text-orange-700 border-orange-200'
   if (stage === 'SIN_CONTACTO')      return 'bg-gray-100 text-gray-500 border-gray-200'
+  if (stage === 'EN_GESTION')        return 'bg-cyan-50 text-cyan-700 border-cyan-200'
+  if (stage === 'EN_FIRMA')          return 'bg-amber-50 text-amber-700 border-amber-200'
   if (stage === 'ESPERANDO_DOCUMENTOS')
     return 'bg-purple-50 text-purple-700 border-purple-200'
   if ((stage as string).startsWith('BLOQUEADO'))
@@ -1025,6 +1029,76 @@ function HistoryCard({ lead }: { lead: LeadDetail }) {
   )
 }
 
+// ─── Reassignment history card ────────────────────────────────────────────────
+
+function ReassignmentCard({ leadId }: { leadId: string }) {
+  const { data: history = [], isLoading } = useQuery<Reassignment[]>({
+    queryKey: ['reassignments', leadId],
+    queryFn:  () => reassignApi.getByLead(leadId),
+  })
+
+  const fmtDate = (d: string) => {
+    try { return format(parseISO(d), "d MMM yyyy, HH:mm", { locale: es }) }
+    catch { return d }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+          <RefreshCw size={15} className="text-gray-400" />
+          Historial de Reasignaciones
+          {history.length > 0 && (
+            <span className="text-xs font-normal text-gray-400">({history.length})</span>
+          )}
+        </h2>
+        {history.length > 0 && (
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200">
+            {history.length}x reasignado
+          </span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="px-5 py-4 space-y-3 animate-pulse">
+          {[1, 2].map((i) => <div key={i} className="h-12 bg-gray-100 rounded-xl" />)}
+        </div>
+      ) : history.length === 0 ? (
+        <div className="px-5 py-8 text-center text-sm text-gray-400">
+          Sin reasignaciones — lead asignado desde el inicio
+        </div>
+      ) : (
+        <div className="px-5 py-4 space-y-3">
+          {history.map((r) => (
+            <div key={r.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+              <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                <RefreshCw size={13} className="text-orange-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap text-sm">
+                  <span className="font-medium text-gray-700 truncate">
+                    {r.fromUserName ?? 'Sin asignar'}
+                  </span>
+                  <ChevronRight size={12} className="text-gray-400 shrink-0" />
+                  <span className="font-semibold text-gray-900 truncate">
+                    {r.toUserName ?? r.toUserId}
+                  </span>
+                </div>
+                {r.reason && (
+                  <p className="text-xs text-gray-400 mt-0.5 italic truncate" title={r.reason}>
+                    "{r.reason}"
+                  </p>
+                )}
+                <p className="text-xs text-gray-400 mt-0.5">{fmtDate(r.reassignedAt)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Page skeleton ────────────────────────────────────────────────────────────
 
 function PageSkeleton() {
@@ -1154,6 +1228,7 @@ export default function LeadDetailPage() {
         <div className="space-y-6">
           <StageCard lead={lead} />
           <HistoryCard lead={lead} />
+          <ReassignmentCard leadId={lead.id} />
         </div>
 
       </div>

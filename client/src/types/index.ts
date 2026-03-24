@@ -39,6 +39,18 @@ export interface User {
   leaderId?:   string
 }
 
+export interface Reassignment {
+  id:             string
+  leadId:         string
+  fromUserId?:    string
+  fromUserName?:  string
+  toUserId:       string
+  toUserName?:    string
+  reason?:        string
+  reassignedById: string
+  reassignedAt:   string
+}
+
 export interface Lead {
   id:                     string
   leadIdExternal:         string
@@ -65,6 +77,7 @@ export interface Lead {
   bloqueado:              boolean
   negociacionExitosa:     boolean
   ultimaFechaContacto?:   string
+  reassignmentCount:      number
   isDeleted:              boolean
   createdAt:              string
   updatedAt:              string
