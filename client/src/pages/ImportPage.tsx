@@ -124,7 +124,12 @@ function sheetRowsToLeads(
     }
 
     // ── Country ──
+    const VALID_COUNTRIES = ['CO', 'MX', 'AR', 'PE', 'CL', 'EC']
     const country = (getCol(row, 'COUNTRY', 'PAIS', 'country', 'pais', 'país') ?? 'CO').toUpperCase()
+    if (!VALID_COUNTRIES.includes(country)) {
+      errors.push({ row: rowNum, sheet: sheetName, message: `País "${country}" no soportado (válidos: ${VALID_COUNTRIES.join(', ')})` })
+      return
+    }
 
     // ── Hunter → assigned_to_id ──
     const hunterName   = getCol(row, 'HUNTER', 'hunter')
