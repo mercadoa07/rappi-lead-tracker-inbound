@@ -5,7 +5,7 @@ import { formatDistanceToNow, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   Clock, AlertTriangle, CheckCheck, Check, Eye, BellOff, Loader2,
-  UserPlus, TrendingDown,
+  UserPlus, TrendingDown, CalendarX, Activity, FileWarning,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { alertsApi } from '../services/api'
@@ -19,10 +19,12 @@ const STAGE_SHORT: Record<FunnelStage, string> = {
   SIN_CONTACTO:                 'Sin Contacto',
   CONTACTO_FALLIDO:             'C. Fallido',
   CONTACTO_EFECTIVO:            'C. Efectivo',
-  OK_R2S:                       'OK R2S',
-  ESPERANDO_DOCUMENTOS:         'Esp. Docs',
-  OB:                           'OB',
+  EN_GESTION:                   'En Gestión',
   PROPUESTA_ENVIADA:            'Prop. Enviada',
+  ESPERANDO_DOCUMENTOS:         'Esp. Docs',
+  EN_FIRMA:                     'En Firma',
+  OB:                           'OB',
+  OK_R2S:                       'OK R2S',
   VENTA:                        'Venta',
   BLOQUEADO_NO_INTERESA:        'No Interesa',
   BLOQUEADO_IMPOSIBLE_CONTACTO: 'Imposible',
@@ -88,6 +90,27 @@ function AlertTypeIcon({ type, unread }: { type: Alert['type']; unread: boolean 
     return (
       <div className={cn(base, 'bg-danger/10')}>
         <TrendingDown size={20} className="text-danger" />
+      </div>
+    )
+  }
+  if (type === 'SIN_PROXIMO_CONTACTO_3D') {
+    return (
+      <div className={cn(base, 'bg-warning/10')}>
+        <CalendarX size={20} className="text-warning" />
+      </div>
+    )
+  }
+  if (type === 'SIN_AVANCE_5D') {
+    return (
+      <div className={cn(base, 'bg-danger/10')}>
+        <Activity size={20} className="text-danger" />
+      </div>
+    )
+  }
+  if (type === 'ESPERANDO_DOCS_7D') {
+    return (
+      <div className={cn(base, 'bg-danger/10')}>
+        <FileWarning size={20} className="text-danger" />
       </div>
     )
   }
