@@ -398,11 +398,6 @@ function Header({ onMobileMenuClick }: { onMobileMenuClick: () => void }) {
               {user.role}
             </span>
           )}
-          {user?.team && (
-            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-info/10 text-info border border-info/20">
-              {user.team}
-            </span>
-          )}
           {user?.country && (
             <span
               className="text-[11px] font-medium text-gray-500 bg-gray-light rounded-full px-2.5 py-1 border border-gray-medium"
