@@ -242,11 +242,6 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
               </p>
               <div className="flex items-center gap-1.5">
                 <p className="text-xs text-white/40 truncate">{user?.email}</p>
-                {user?.team && (
-                  <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-white/10 text-white/60">
-                    {user.team}
-                  </span>
-                )}
               </div>
             </div>
             <button
