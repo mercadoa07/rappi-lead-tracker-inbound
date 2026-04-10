@@ -57,6 +57,7 @@ export function mapLead(row: any): Lead {
     tieneIntentoContacto:  row.tiene_intento_contacto  ?? false,
     tieneContactoEfectivo: row.tiene_contacto_efectivo ?? false,
     bloqueado:             row.bloqueado           ?? false,
+    motivoDescarte:        row.motivo_descarte     ?? undefined,
     negociacionExitosa:    row.negociacion_exitosa ?? false,
     ultimaFechaContacto:   row.ultima_fecha_contacto ?? undefined,
     reassignmentCount:     row.reassignment_count   ?? 0,
@@ -340,7 +341,7 @@ export const contactsApi = {
 // ─── stageApi ─────────────────────────────────────────────────────────────────
 
 export const stageApi = {
-  transitionStage: async (leadId: string, newStage: FunnelStage) => {
+  transitionStage: async (leadId: string, newStage: FunnelStage, motivoDescarte?: string) => {
     const { data: session } = await supabase.auth.getUser()
     const userId = session.user?.id
     if (!userId) throw new Error('Not authenticated')
@@ -353,7 +354,7 @@ export const stageApi = {
 
     if (leadErr || !lead) throw leadErr ?? new Error('Lead not found')
 
-    const isBloqueado = newStage.startsWith('BLOQUEADO')
+    const isDescartado = newStage === 'DESCARTADO'
 
     const { error: updateErr } = await supabase
       .from('leads')
@@ -361,7 +362,8 @@ export const stageApi = {
         current_stage:    newStage,
         stage_changed_at: new Date().toISOString(),
         fecha_estado:     new Date().toISOString(),
-        bloqueado:        isBloqueado,
+        bloqueado:        isDescartado,
+        motivo_descarte:  isDescartado ? (motivoDescarte ?? null) : null,
         negociacion_exitosa: ['OK_R2S', 'VENTA'].includes(newStage),
       })
       .eq('id', leadId)

@@ -263,12 +263,12 @@ export default function GestionPage() {
   const totals = summary?.totals
 
   // ── Chart data ──────────────────────────────────────────────────────────────
-  const funnelActive  = funnel.filter(e => !e.stage.startsWith('BLOQUEADO'))
+  const funnelActive  = funnel.filter(e => e.stage !== 'DESCARTADO')
     .sort((a, b) => FUNNEL_ORDER.indexOf(a.stage) - FUNNEL_ORDER.indexOf(b.stage))
-  const funnelBlocked = funnel.filter(e => e.stage.startsWith('BLOQUEADO'))
+  const funnelBlocked = funnel.filter(e => e.stage === 'DESCARTADO')
 
   const stageAdvancesOrdered = [...stageAdvances]
-    .filter(e => !e.stage.startsWith('BLOQUEADO'))
+    .filter(e => e.stage !== 'DESCARTADO')
     .sort((a, b) => FUNNEL_ORDER.indexOf(a.stage) - FUNNEL_ORDER.indexOf(b.stage))
 
   const maxFunnel   = Math.max(...funnelActive.map(e => e.count),  1)

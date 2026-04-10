@@ -21,7 +21,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { leadsApi, stageApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { cn } from '../utils/cn'
-import { STAGE_LABEL, STAGE_COLORS, STAGE_TRANSITIONS, BLOCKED_STAGES } from '../utils/constants'
+import { STAGE_LABEL, STAGE_COLORS, STAGE_TRANSITIONS } from '../utils/constants'
 import type { Lead, FunnelStage, LeadSource } from '../types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ function ConfirmBlockedDialog({
             <AlertTriangle size={20} className="text-red-600" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-gray-900">Confirmar bloqueo?</h3>
+            <h3 className="text-base font-bold text-gray-900">Confirmar descarte?</h3>
             <p className="text-sm text-gray-400 mt-1">
               Moverás el lead de <span className="font-semibold text-gray-900">{STAGE_LABEL[fromStage]}</span> a{' '}
               <span className="font-semibold text-red-600">{STAGE_LABEL[toStage]}</span>.
@@ -305,7 +305,7 @@ export default function KanbanPage() {
   // ── Group by stage ───────────────────────────────────────────────────────────
   const byStage = useMemo(() => {
     const map: Record<FunnelStage, Lead[]> = {} as Record<FunnelStage, Lead[]>
-    for (const s of [...ACTIVE_STAGES, ...BLOCKED_STAGES]) map[s] = []
+    for (const s of [...ACTIVE_STAGES, 'DESCARTADO' as FunnelStage]) map[s] = []
     for (const lead of allLeads) {
       if (map[lead.currentStage]) map[lead.currentStage].push(lead)
     }
@@ -313,7 +313,7 @@ export default function KanbanPage() {
   }, [allLeads])
 
   const blockedCount = useMemo(
-    () => BLOCKED_STAGES.reduce((sum, s) => sum + (byStage[s]?.length ?? 0), 0),
+    () => byStage['DESCARTADO']?.length ?? 0,
     [byStage],
   )
 
@@ -360,8 +360,8 @@ export default function KanbanPage() {
       return
     }
 
-    // Blocked stages need confirmation
-    if (BLOCKED_STAGES.includes(toStage)) {
+    // DESCARTADO needs confirmation
+    if (toStage === 'DESCARTADO') {
       setPendingMove({ leadId: lead.id, fromStage: lead.currentStage, toStage })
       return
     }
@@ -479,7 +479,7 @@ export default function KanbanPage() {
             <div className="shrink-0 mt-3 flex items-center gap-2 text-sm text-gray-400 border-t border-gray-100 pt-3">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-600 text-xs font-semibold">
                 <AlertTriangle size={12} />
-                {blockedCount} lead{blockedCount !== 1 ? 's' : ''} bloqueado{blockedCount !== 1 ? 's' : ''}
+                {blockedCount} lead{blockedCount !== 1 ? 's' : ''} descartado{blockedCount !== 1 ? 's' : ''}
               </span>
               <span className="text-xs text-gray-400">
                 (no se muestran como columnas — gestionar desde el detalle del lead)

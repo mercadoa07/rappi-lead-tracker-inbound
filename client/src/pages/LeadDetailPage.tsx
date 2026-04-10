@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { leadsApi, contactsApi, stageApi, reassignApi } from '../services/api'
 import { cn } from '../utils/cn'
-import { STAGE_LABEL, STAGE_COLORS, STAGE_TRANSITIONS, COUNTRY_FLAG, BLOCKED_STAGES } from '../utils/constants'
+import { STAGE_LABEL, STAGE_COLORS, STAGE_TRANSITIONS, COUNTRY_FLAG } from '../utils/constants'
 import { useAuth } from '../context/AuthContext'
 import type { Lead, ContactAttempt, StageHistory, FunnelStage, LeadSource, Reassignment } from '../types'
 import type { ContactResult, ContactMethod } from '../types'
@@ -19,22 +19,17 @@ import type { ContactResult, ContactMethod } from '../types'
 // ─── Local label helpers ──────────────────────────────────────────────────────
 
 const STAGE_LABEL_FULL: Record<FunnelStage, string> = {
-  SIN_CONTACTO:                 'Sin Contacto',
-  CONTACTO_FALLIDO:             'Contacto Fallido',
-  CONTACTO_EFECTIVO:            'Contacto Efectivo',
-  EN_GESTION:                   'En Gestión',
-  PROPUESTA_ENVIADA:            'Propuesta Enviada',
-  ESPERANDO_DOCUMENTOS:         'Esperando Documentos',
-  EN_FIRMA:                     'En Firma',
-  OB:                           'OB',
-  OK_R2S:                       'OK R2S',
-  VENTA:                        'Venta',
-  BLOQUEADO_NO_INTERESA:        'Bloq. No Interesa',
-  BLOQUEADO_IMPOSIBLE_CONTACTO: 'Bloq. Imposible Contacto',
-  BLOQUEADO_FUERA_COBERTURA:    'Bloq. Fuera Cobertura',
-  BLOQUEADO_NO_RESTAURANTE:     'Bloq. No Restaurante',
-  BLOQUEADO_RESTAURANTE_CERRADO:'Bloq. Rest. Cerrado',
-  BLOQUEADO_YA_EN_RAPPI:        'Bloq. Ya en Rappi',
+  SIN_CONTACTO:         'Sin Contacto',
+  CONTACTO_FALLIDO:     'Contacto Fallido',
+  CONTACTO_EFECTIVO:    'Contacto Efectivo',
+  EN_GESTION:           'En Gestión',
+  PROPUESTA_ENVIADA:    'Propuesta Enviada',
+  ESPERANDO_DOCUMENTOS: 'Esperando Documentos',
+  EN_FIRMA:             'En Firma',
+  OB:                   'OB',
+  OK_R2S:               'OK R2S',
+  VENTA:                'Venta',
+  DESCARTADO:           'Descartado',
 }
 
 const CONTACT_METHOD_LABEL: Record<ContactMethod, string> = {
@@ -49,9 +44,7 @@ const CONTACT_RESULT_LABEL: Record<ContactResult, string> = {
   OCUPADO:  'Ocupado',
 }
 
-const CONTACT_BLOCKED_STAGES: FunnelStage[] = [
-  ...BLOCKED_STAGES, 'OK_R2S', 'VENTA',
-]
+const CONTACT_BLOCKED_STAGES: FunnelStage[] = ['DESCARTADO', 'OK_R2S', 'VENTA']
 
 // ─── Stage badge helpers ──────────────────────────────────────────────────────
 
@@ -67,7 +60,7 @@ function stageBadgeClass(stage: FunnelStage): string {
   if (stage === 'EN_FIRMA')          return 'bg-amber-50 text-amber-700 border-amber-200'
   if (stage === 'ESPERANDO_DOCUMENTOS')
     return 'bg-purple-50 text-purple-700 border-purple-200'
-  if ((stage as string).startsWith('BLOQUEADO'))
+  if (stage === 'DESCARTADO')
     return 'bg-red-50 text-red-700 border-red-200'
   return 'bg-gray-100 text-gray-500 border-gray-200'
 }
@@ -444,14 +437,18 @@ function ContactModal({
 
 function ConfirmDialog({
   stage,
+  motivoDescarte,
+  onMotivoChange,
   onConfirm,
   onCancel,
   isPending,
 }: {
-  stage:     FunnelStage
-  onConfirm: () => void
-  onCancel:  () => void
-  isPending: boolean
+  stage:           FunnelStage
+  motivoDescarte:  string
+  onMotivoChange:  (v: string) => void
+  onConfirm:       () => void
+  onCancel:        () => void
+  isPending:       boolean
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -462,13 +459,27 @@ function ConfirmDialog({
             <AlertTriangle size={20} className="text-orange-500" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-gray-900">Confirmar cambio de etapa?</h3>
+            <h3 className="text-base font-bold text-gray-900">Confirmar descarte</h3>
             <p className="text-sm text-gray-400 mt-1">
               Vas a mover el lead a <span className="font-semibold text-gray-900">{STAGE_LABEL_FULL[stage]}</span>.
               Esta accion puede ser dificil de revertir.
             </p>
           </div>
         </div>
+        {stage === 'DESCARTADO' && (
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
+              Motivo de descarte <span className="text-gray-400">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={motivoDescarte}
+              onChange={(e) => onMotivoChange(e.target.value)}
+              placeholder="Ej: No le interesa, Fuera de cobertura..."
+              className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-red-400"
+            />
+          </div>
+        )}
         <div className="flex gap-2 pt-1">
           <button
             onClick={onCancel}
@@ -632,7 +643,7 @@ function InfoCard({
             )}
             {lead.bloqueado && (
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
-                Bloqueado
+                Descartado{lead.motivoDescarte ? `: ${lead.motivoDescarte}` : ''}
               </span>
             )}
             {lead.negociacionExitosa && (
@@ -815,9 +826,10 @@ function StageCard({
   lead: LeadDetail
 }) {
   const queryClient           = useQueryClient()
-  const [selected, setSelected] = useState<FunnelStage | ''>('')
-  const [confirm,  setConfirm]  = useState(false)
-  const [dropOpen, setDropOpen] = useState(false)
+  const [selected,       setSelected]       = useState<FunnelStage | ''>('')
+  const [confirm,        setConfirm]        = useState(false)
+  const [dropOpen,       setDropOpen]       = useState(false)
+  const [motivoDescarte, setMotivoDescarte] = useState('')
   const dropRef = useRef<HTMLDivElement>(null)
 
   const currentStage = lead.currentStage
@@ -825,19 +837,22 @@ function StageCard({
   const isTerminal   = transitions.length === 0
 
   const mutation = useMutation({
-    mutationFn: (newStage: FunnelStage) => stageApi.transitionStage(lead.id, newStage),
-    onSuccess: (_data, newStage) => {
+    mutationFn: ({ stage, motivo }: { stage: FunnelStage; motivo?: string }) =>
+      stageApi.transitionStage(lead.id, stage, motivo),
+    onSuccess: (_data, { stage: newStage }) => {
       queryClient.invalidateQueries({ queryKey: ['lead', lead.id] })
       queryClient.invalidateQueries({ queryKey: ['leads-kanban'] })
       toast.success(`Etapa cambiada a ${STAGE_LABEL_FULL[newStage]}`)
       setSelected('')
       setConfirm(false)
+      setMotivoDescarte('')
     },
     onError: (err: unknown) => {
       const msg = (err as Error)?.message ?? 'Error al cambiar etapa'
       toast.error(msg)
       setSelected('')
       setConfirm(false)
+      setMotivoDescarte('')
     },
   })
 
@@ -853,10 +868,10 @@ function StageCard({
   const handleSelect = (stage: FunnelStage) => {
     setSelected(stage)
     setDropOpen(false)
-    if (BLOCKED_STAGES.includes(stage)) {
+    if (stage === 'DESCARTADO') {
       setConfirm(true)
     } else {
-      mutation.mutate(stage)
+      mutation.mutate({ stage })
     }
   }
 
@@ -907,7 +922,7 @@ function StageCard({
                 {dropOpen && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl z-[9999] py-1 max-h-72 overflow-y-auto">
                     {transitions.map((stage) => {
-                      const isBlocked = BLOCKED_STAGES.includes(stage)
+                      const isDescartado = stage === 'DESCARTADO'
                       return (
                         <button
                           key={stage}
@@ -915,12 +930,12 @@ function StageCard({
                           onClick={() => handleSelect(stage)}
                           className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors text-left"
                         >
-                          <span className={cn(isBlocked ? 'text-red-600' : 'text-gray-900')}>
+                          <span className={cn(isDescartado ? 'text-red-600' : 'text-gray-900')}>
                             {STAGE_LABEL_FULL[stage]}
                           </span>
-                          {isBlocked && (
+                          {isDescartado && (
                             <span className="text-[10px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
-                              Bloqueado
+                              Descarte
                             </span>
                           )}
                         </button>
@@ -937,8 +952,10 @@ function StageCard({
       {confirm && selected && (
         <ConfirmDialog
           stage={selected as FunnelStage}
-          onConfirm={() => mutation.mutate(selected as FunnelStage)}
-          onCancel={() => { setConfirm(false); setSelected('') }}
+          motivoDescarte={motivoDescarte}
+          onMotivoChange={setMotivoDescarte}
+          onConfirm={() => mutation.mutate({ stage: selected as FunnelStage, motivo: motivoDescarte || undefined })}
+          onCancel={() => { setConfirm(false); setSelected(''); setMotivoDescarte('') }}
           isPending={mutation.isPending}
         />
       )}

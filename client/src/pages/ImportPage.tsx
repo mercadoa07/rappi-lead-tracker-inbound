@@ -196,7 +196,7 @@ function sheetRowsToLeads(
       const v = (c.result ?? '').trim().toUpperCase()
       return v === 'EFECTIVO'
     })
-    const bloqueado          = currentStage.startsWith('BLOQUEADO')
+    const bloqueado          = currentStage === 'DESCARTADO'
     const negociacionExitosa = ['OK_R2S', 'VENTA'].includes(currentStage)
     const ultimaFechaContacto = fechasContacto.length > 0
       ? fechasContacto.sort().reverse()[0]

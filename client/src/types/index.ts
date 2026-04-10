@@ -18,12 +18,7 @@ export type FunnelStage =
   | 'OB'
   | 'OK_R2S'
   | 'VENTA'
-  | 'BLOQUEADO_NO_INTERESA'
-  | 'BLOQUEADO_IMPOSIBLE_CONTACTO'
-  | 'BLOQUEADO_FUERA_COBERTURA'
-  | 'BLOQUEADO_NO_RESTAURANTE'
-  | 'BLOQUEADO_RESTAURANTE_CERRADO'
-  | 'BLOQUEADO_YA_EN_RAPPI'
+  | 'DESCARTADO'
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
@@ -75,6 +70,7 @@ export interface Lead {
   tieneIntentoContacto:   boolean
   tieneContactoEfectivo:  boolean
   bloqueado:              boolean
+  motivoDescarte?:        string
   negociacionExitosa:     boolean
   ultimaFechaContacto?:   string
   reassignmentCount:      number
