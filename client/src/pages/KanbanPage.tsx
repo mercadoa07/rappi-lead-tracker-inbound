@@ -26,8 +26,9 @@ import type { Lead, FunnelStage, LeadSource } from '../types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+// Etapas que se muestran como columnas en el Kanban
+// SIN_CONTACTO y OK_R2S se muestran como contadores, no como columnas
 const ACTIVE_STAGES: FunnelStage[] = [
-  'SIN_CONTACTO',
   'CONTACTO_FALLIDO',
   'CONTACTO_EFECTIVO',
   'EN_GESTION',
@@ -35,7 +36,6 @@ const ACTIVE_STAGES: FunnelStage[] = [
   'ESPERANDO_DOCUMENTOS',
   'EN_FIRMA',
   'OB',
-  'OK_R2S',
 ]
 
 // ─── Confirm dialog ───────────────────────────────────────────────────────────
@@ -296,6 +296,9 @@ export default function KanbanPage() {
       leadsApi.getLeads({
         search:  search || undefined,
         source:  source !== 'ALL' ? source : undefined,
+        stage:   ['CONTACTO_FALLIDO', 'CONTACTO_EFECTIVO', 'EN_GESTION',
+                  'PROPUESTA_ENVIADA', 'ESPERANDO_DOCUMENTOS', 'EN_FIRMA', 'OB',
+                  'OK_R2S', 'DESCARTADO'],
         page:    1,
         limit:   10000,
       }),
@@ -307,17 +310,16 @@ export default function KanbanPage() {
   // ── Group by stage ───────────────────────────────────────────────────────────
   const byStage = useMemo(() => {
     const map: Record<FunnelStage, Lead[]> = {} as Record<FunnelStage, Lead[]>
-    for (const s of [...ACTIVE_STAGES, 'DESCARTADO' as FunnelStage]) map[s] = []
+    for (const s of [...ACTIVE_STAGES, 'OK_R2S' as FunnelStage, 'DESCARTADO' as FunnelStage]) map[s] = []
     for (const lead of allLeads) {
       if (map[lead.currentStage]) map[lead.currentStage].push(lead)
     }
     return map
   }, [allLeads])
 
-  const blockedCount = useMemo(
-    () => byStage['DESCARTADO']?.length ?? 0,
-    [byStage],
-  )
+  const descartadoCount = useMemo(() => byStage['DESCARTADO']?.length ?? 0, [byStage])
+  const r2sCount        = useMemo(() => byStage['OK_R2S']?.length ?? 0,     [byStage])
+  const blockedCount    = descartadoCount
 
   // ── Active drag lead ─────────────────────────────────────────────────────────
   const activeLead = activeId ? allLeads.find((l) => l.id === activeId) ?? null : null
@@ -476,15 +478,22 @@ export default function KanbanPage() {
             ))}
           </div>
 
-          {/* Blocked counter */}
-          {blockedCount > 0 && (
-            <div className="shrink-0 mt-3 flex items-center gap-2 text-sm text-gray-400 border-t border-gray-100 pt-3">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-600 text-xs font-semibold">
-                <AlertTriangle size={12} />
-                {blockedCount} lead{blockedCount !== 1 ? 's' : ''} descartado{blockedCount !== 1 ? 's' : ''}
-              </span>
+          {/* Counters for non-column stages */}
+          {(r2sCount > 0 || descartadoCount > 0) && (
+            <div className="shrink-0 mt-3 flex items-center gap-3 flex-wrap border-t border-gray-100 pt-3">
+              {r2sCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-semibold">
+                  ✓ {r2sCount} OK R2S
+                </span>
+              )}
+              {descartadoCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-600 text-xs font-semibold">
+                  <AlertTriangle size={12} />
+                  {descartadoCount} descartado{descartadoCount !== 1 ? 's' : ''}
+                </span>
+              )}
               <span className="text-xs text-gray-400">
-                (no se muestran como columnas — gestionar desde el detalle del lead)
+                (no se muestran como columnas — ver desde lista de leads)
               </span>
             </div>
           )}
