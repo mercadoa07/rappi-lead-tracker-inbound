@@ -72,9 +72,16 @@ function parseSheetDate(raw: unknown): string | undefined {
       return `${d.y}-${month}-${day}`
     }
   }
-  // Try ISO / common formats
+  // Try ISO / common formats — parse as UTC to avoid timezone day shift
+  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
   const parsed = new Date(s)
-  if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0]
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getUTCFullYear()
+    const m = String(parsed.getUTCMonth() + 1).padStart(2, '0')
+    const d = String(parsed.getUTCDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
   return undefined
 }
 

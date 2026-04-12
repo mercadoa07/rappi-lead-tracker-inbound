@@ -1,4 +1,9 @@
 -- ════════════════════════════════════════════════════════════
+-- ⚠️  DEPRECATED — no correr contra una DB con migrations_v5.sql aplicado.
+-- Las funciones get_team_summary y get_discard_reasons aquí referencian
+-- etapas BLOQUEADO_* que fueron reemplazadas por DESCARTADO + motivo_descarte.
+-- La versión activa en producción está en supabase/migrations_v5.sql
+-- ════════════════════════════════════════════════════════════
 -- RPC Functions — rappi-lead-tracker-inbound
 -- ════════════════════════════════════════════════════════════
 
