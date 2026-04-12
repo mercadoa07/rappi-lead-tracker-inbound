@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, memo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -102,7 +102,7 @@ function SourceToggle({
 
 // ─── RankingRow ───────────────────────────────────────────────────────────────
 
-function RankingRow({
+const RankingRow = memo(function RankingRow({
   entry, rank, isCurrent,
 }: {
   entry: HunterStats; rank: number; isCurrent: boolean
@@ -129,7 +129,6 @@ function RankingRow({
           <div className="min-w-0">
             <p className="text-sm font-semibold text-dark truncate flex items-center gap-1.5">
               {entry.hunterName}
-              <TeamBadge team={entry.team} />
               {isCurrent && (
                 <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
                   Tú
@@ -170,24 +169,13 @@ function RankingRow({
         </span>
       </td>
 
-      {/* Phasing */}
-      <td className="px-4 py-3 text-center whitespace-nowrap">
-        <span className={cn(
-          'text-sm font-bold tabular-nums',
-          entry.phasing >= 100 ? 'text-success' :
-          entry.phasing >= 60  ? 'text-warning'  : 'text-danger',
-        )}>
-          {entry.phasing.toFixed(1)}%
-        </span>
-      </td>
-
       {/* Total leads */}
       <td className="px-4 py-3 text-center whitespace-nowrap">
         <span className="text-sm font-medium text-gray-500 tabular-nums">{entry.totalLeads}</span>
       </td>
     </tr>
   )
-}
+})
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -211,7 +199,7 @@ const PODIUM_STYLES = {
   3: { bg: 'bg-amber-50',  border: 'border-amber-200',  text: 'text-amber-700',  icon: Award, iconCls: 'text-amber-500',  tagline: 'Bronce',      lift: false },
 } as const
 
-function PodiumCard({ entry, rank, isCurrent }: { entry: HunterStats; rank: number; isCurrent: boolean }) {
+const PodiumCard = memo(function PodiumCard({ entry, rank, isCurrent }: { entry: HunterStats; rank: number; isCurrent: boolean }) {
   const s     = PODIUM_STYLES[rank as 1 | 2 | 3]
   const Icon  = s.icon
   const inits = entry.hunterName.split(' ').slice(0, 2).map((w) => w[0] ?? '').join('')
@@ -232,12 +220,11 @@ function PodiumCard({ entry, rank, isCurrent }: { entry: HunterStats; rank: numb
         {entry.hunterName}
         {isCurrent && <span className="ml-1 text-[10px] text-primary font-bold">(Tú)</span>}
       </p>
-      <TeamBadge team={entry.team} />
       <p className={cn('text-3xl font-extrabold', s.text)}>{entry.productivity}</p>
       <p className="text-[10px] text-gray-400">productividad (OB+R2S)</p>
     </div>
   )
-}
+})
 
 // ─── RankingPage ──────────────────────────────────────────────────────────────
 
@@ -317,10 +304,6 @@ export default function RankingPage() {
               <p className="text-[10px] text-gray-400">Productividad</p>
               <p className="text-lg font-extrabold text-dark">{myEntry.productivity}</p>
             </div>
-            <div className="border-l border-primary/20 pl-3">
-              <p className="text-[10px] text-gray-400">Team</p>
-              <TeamBadge team={myEntry.team} />
-            </div>
           </div>
         )}
       </div>
@@ -385,12 +368,6 @@ export default function RankingPage() {
                   className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-400 cursor-pointer hover:text-dark"
                 >
                   <span className="inline-flex items-center gap-1"><Percent size={11} />Contactabilidad</span>
-                </th>
-                <th
-                  onClick={() => handleSort('phasing')}
-                  className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-400 cursor-pointer hover:text-dark"
-                >
-                  <span className="inline-flex items-center gap-1"><Target size={11} />Phasing</span>
                 </th>
                 <th
                   onClick={() => handleSort('totalLeads')}

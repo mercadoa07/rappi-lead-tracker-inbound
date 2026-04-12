@@ -72,9 +72,16 @@ function parseSheetDate(raw: unknown): string | undefined {
       return `${d.y}-${month}-${day}`
     }
   }
-  // Try ISO / common formats
+  // Try ISO / common formats — parse as UTC to avoid timezone day shift
+  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
   const parsed = new Date(s)
-  if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0]
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getUTCFullYear()
+    const m = String(parsed.getUTCMonth() + 1).padStart(2, '0')
+    const d = String(parsed.getUTCDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
   return undefined
 }
 
@@ -124,7 +131,12 @@ function sheetRowsToLeads(
     }
 
     // ── Country ──
+    const VALID_COUNTRIES = ['CO', 'MX', 'AR', 'PE', 'CL', 'EC']
     const country = (getCol(row, 'COUNTRY', 'PAIS', 'country', 'pais', 'país') ?? 'CO').toUpperCase()
+    if (!VALID_COUNTRIES.includes(country)) {
+      errors.push({ row: rowNum, sheet: sheetName, message: `País "${country}" no soportado (válidos: ${VALID_COUNTRIES.join(', ')})` })
+      return
+    }
 
     // ── Hunter → assigned_to_id ──
     const hunterName   = getCol(row, 'HUNTER', 'hunter')
@@ -191,7 +203,7 @@ function sheetRowsToLeads(
       const v = (c.result ?? '').trim().toUpperCase()
       return v === 'EFECTIVO'
     })
-    const bloqueado          = currentStage.startsWith('BLOQUEADO')
+    const bloqueado          = currentStage === 'DESCARTADO'
     const negociacionExitosa = ['OK_R2S', 'VENTA'].includes(currentStage)
     const ultimaFechaContacto = fechasContacto.length > 0
       ? fechasContacto.sort().reverse()[0]

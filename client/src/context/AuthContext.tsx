@@ -4,7 +4,7 @@ import type { User } from '../types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type AuthUser = Pick<User, 'id' | 'email' | 'fullName' | 'role' | 'country' | 'team'> & {
+type AuthUser = Pick<User, 'id' | 'email' | 'fullName' | 'role' | 'country'> & {
   leaderId?: string
 }
 
@@ -12,11 +12,12 @@ interface AuthState {
   user:            AuthUser | null
   isAuthenticated: boolean
   isLoading:       boolean
+  unauthorized:    boolean   // logged in with Google but no profile
 }
 
 interface AuthContextValue extends AuthState {
-  login:  (email: string, password: string) => Promise<void>
-  logout: () => Promise<void>
+  loginWithGoogle: () => Promise<void>
+  logout:          () => Promise<void>
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -30,12 +31,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user:            null,
     isAuthenticated: false,
     isLoading:       true,
+    unauthorized:    false,
   })
 
   const loadProfile = useCallback(async (userId: string) => {
     const { data } = await supabase
       .from('profiles')
-      .select('id, email, full_name, role, country, team, leader_id')
+      .select('id, email, full_name, role, country, leader_id')
       .eq('id', userId)
       .single()
 
@@ -47,19 +49,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fullName: data.full_name,
           role:     data.role,
           country:  data.country,
-          team:     data.team,
           leaderId: data.leader_id ?? undefined,
         },
         isAuthenticated: true,
         isLoading:       false,
+        unauthorized:    false,
       })
     } else {
-      setState({ user: null, isAuthenticated: false, isLoading: false })
+      // Google auth OK pero no tiene perfil en la app — acceso denegado
+      await supabase.auth.signOut()
+      setState({ user: null, isAuthenticated: false, isLoading: false, unauthorized: true })
     }
   }, [])
 
   useEffect(() => {
+    let initialLoadDone = false
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      initialLoadDone = true
       if (session?.user) {
         loadProfile(session.user.id)
       } else {
@@ -67,29 +74,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!initialLoadDone || event === 'INITIAL_SESSION') return
       if (session?.user) {
         loadProfile(session.user.id)
       } else {
-        setState({ user: null, isAuthenticated: false, isLoading: false })
+        setState((s) => ({ ...s, user: null, isAuthenticated: false, isLoading: false }))
       }
     })
 
     return () => subscription.unsubscribe()
   }, [loadProfile])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
+  const loginWithGoogle = useCallback(async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + '/auth/callback',
+      },
+    })
   }, [])
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut()
-    setState({ user: null, isAuthenticated: false, isLoading: false })
+    setState({ user: null, isAuthenticated: false, isLoading: false, unauthorized: false })
   }, [])
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
+    <AuthContext.Provider value={{ ...state, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   )

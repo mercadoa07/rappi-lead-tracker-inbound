@@ -1,31 +1,53 @@
 -- ════════════════════════════════════════════════════════════
+-- ⚠️  DEPRECATED — no correr contra una DB con migrations_v5.sql aplicado.
+-- Las funciones get_team_summary y get_discard_reasons aquí referencian
+-- etapas BLOQUEADO_* que fueron reemplazadas por DESCARTADO + motivo_descarte.
+-- La versión activa en producción está en supabase/migrations_v5.sql
+-- ════════════════════════════════════════════════════════════
 -- RPC Functions — rappi-lead-tracker-inbound
 -- ════════════════════════════════════════════════════════════
 
 -- ─── Helper: period bounds ───────────────────────────────────────────────────
+-- Handles: today | this_week | last_week | this_month | last_month
+-- v_biz_days = Mon–Fri days elapsed in the period (capped at p_date for current periods)
 
 create or replace function period_bounds(p_period text, p_date date)
-returns table(v_from timestamptz, v_to timestamptz, v_days int) as $$
+returns table(v_from timestamptz, v_to timestamptz, v_days int, v_biz_days int) as $$
+declare
+  v_start date;
+  v_end   date;
 begin
   case p_period
-    when 'daily' then
-      return query select
-        date_trunc('day', p_date::timestamptz),
-        date_trunc('day', p_date::timestamptz) + interval '1 day' - interval '1 second',
-        1::int;
-    when 'weekly' then
-      return query select
-        date_trunc('week', p_date::timestamptz),
-        date_trunc('week', p_date::timestamptz) + interval '7 days' - interval '1 second',
-        7::int;
-    else -- monthly
-      return query select
-        date_trunc('month', p_date::timestamptz),
-        (date_trunc('month', p_date::timestamptz) + interval '1 month') - interval '1 second',
-        extract(day from
-          (date_trunc('month', p_date::timestamptz) + interval '1 month') - interval '1 day'
-        )::int;
+    when 'today' then
+      v_start := p_date;
+      v_end   := p_date;
+    when 'this_week' then
+      v_start := date_trunc('week', p_date::timestamp)::date;           -- Monday
+      v_end   := least(v_start + 6, p_date);                           -- cap at today
+    when 'last_week' then
+      v_start := (date_trunc('week', p_date::timestamp) - interval '7 days')::date;
+      v_end   := v_start + 6;                                           -- full week Mon–Sun
+    when 'this_month' then
+      v_start := date_trunc('month', p_date::timestamp)::date;
+      v_end   := least((v_start + interval '1 month' - interval '1 day')::date, p_date);
+    when 'last_month' then
+      v_start := (date_trunc('month', p_date::timestamp) - interval '1 month')::date;
+      v_end   := (v_start + interval '1 month' - interval '1 day')::date;
+    else -- fallback: this_month
+      v_start := date_trunc('month', p_date::timestamp)::date;
+      v_end   := least((v_start + interval '1 month' - interval '1 day')::date, p_date);
   end case;
+
+  return query
+    select
+      v_start::timestamptz,
+      (v_end::timestamptz + interval '1 day' - interval '1 second'),
+      (v_end - v_start + 1)::int,
+      (
+        select count(*)::int
+        from generate_series(v_start, v_end, '1 day'::interval) d
+        where extract(isodow from d) <= 5   -- 1=Mon … 5=Fri
+      );
 end;
 $$ language plpgsql security definer;
 
@@ -137,6 +159,16 @@ $$ language plpgsql security definer;
 
 -- ─── get_team_summary ────────────────────────────────────────────────────────
 -- Para LIDER/ADMIN: métricas por hunter con soporte SDR/SOB.
+--
+-- Definiciones:
+--   total_leads        = leads asignados AL HUNTER durante el período
+--   leads_with_contact = leads (de cualquier fecha) contactados durante el período
+--   r2s_count          = leads que ENTRARON a OK_R2S o VENTA durante el período (via stage_history)
+--   ob_count           = snapshot: leads actualmente en OB
+--   r2s_per_day        = r2s_count / días hábiles del período
+--   accumulatedTarget  = daily_target × días hábiles del período
+--   gap                = r2s_count − accumulatedTarget
+--   phasing            = r2s_count / accumulatedTarget × 100
 
 create or replace function get_team_summary(
   p_period  text,
@@ -146,21 +178,22 @@ create or replace function get_team_summary(
 )
 returns json as $$
 declare
-  v_from    timestamptz;
-  v_to      timestamptz;
-  v_days    int;
-  v_user_id uuid := auth.uid();
-  v_role    user_role;
+  v_from     timestamptz;
+  v_to       timestamptz;
+  v_days     int;
+  v_biz_days int;
+  v_user_id  uuid := auth.uid();
+  v_role     user_role;
 begin
-  select pb.v_from, pb.v_to, pb.v_days
-  into v_from, v_to, v_days
+  select pb.v_from, pb.v_to, pb.v_days, pb.v_biz_days
+  into v_from, v_to, v_days, v_biz_days
   from period_bounds(p_period, p_date) pb;
 
   select role into v_role from profiles where id = v_user_id;
 
   return (
     with hunters as (
-      select p.id, p.full_name, p.email, p.country, p.daily_target, p.team
+      select p.id, p.full_name, p.email, p.country, p.daily_target
       from profiles p
       where p.is_active = true
         and p.role = 'HUNTER'
@@ -169,70 +202,124 @@ begin
           or v_role = 'ADMIN'
         )
         and (p_country is null or p.country::text = p_country)
-        and (p_source is null or p.team = p_source)
     ),
     hunter_stats as (
       select
-        h.id                                                  as hunter_id,
-        h.full_name                                           as hunter_name,
-        h.email                                               as hunter_email,
-        h.country                                             as country,
-        h.team                                                as team,
-        h.daily_target                                        as daily_target,
-        count(distinct l.id)                                  as total_leads,
-        count(distinct l.id) filter (where l.tyc is not null) as leads_con_tyc,
-        count(distinct l.id) filter (where l.tyc is null)     as leads_sin_tyc,
-        count(distinct ca_any.lead_id)                        as leads_with_contact,
-        count(distinct ca_eff.lead_id)                        as leads_with_effective,
-        -- Productividad Inbound = OB + OK_R2S + VENTA
-        count(distinct l.id) filter (
-          where l.current_stage in ('OB', 'OK_R2S', 'VENTA')
-        )                                                      as productivity,
-        count(distinct l.id) filter (
-          where l.current_stage = 'OB'
-        )                                                      as ob_count,
-        count(distinct l.id) filter (
-          where l.current_stage in ('OK_R2S', 'VENTA')
-        )                                                      as r2s_count
-      from hunters h
-      left join leads l
-             on l.assigned_to_id = h.id
+        h.id           as hunter_id,
+        h.full_name    as hunter_name,
+        h.email        as hunter_email,
+        h.country      as country,
+        h.daily_target as daily_target,
+
+        -- Leads asignados AL hunter DURANTE el período
+        (
+          select count(distinct l.id)
+          from leads l
+          where l.assigned_to_id = h.id
             and l.is_deleted = false
+            and l.assigned_at between v_from and v_to
             and (p_source is null or l.source = p_source)
-      left join contact_attempts ca_any
-             on ca_any.lead_id = l.id
-            and ca_any.contacted_at between v_from and v_to
-      left join contact_attempts ca_eff
-             on ca_eff.lead_id = l.id
-            and ca_eff.result = 'EFECTIVO'
-            and ca_eff.contacted_at between v_from and v_to
-      group by h.id, h.full_name, h.email, h.country, h.team, h.daily_target
+        ) as total_leads,
+
+        (
+          select count(distinct l.id)
+          from leads l
+          where l.assigned_to_id = h.id
+            and l.is_deleted = false
+            and l.assigned_at between v_from and v_to
+            and l.tyc is not null
+            and (p_source is null or l.source = p_source)
+        ) as leads_con_tyc,
+
+        (
+          select count(distinct l.id)
+          from leads l
+          where l.assigned_to_id = h.id
+            and l.is_deleted = false
+            and l.assigned_at between v_from and v_to
+            and l.tyc is null
+            and (p_source is null or l.source = p_source)
+        ) as leads_sin_tyc,
+
+        -- Gestionados: leads (cualquier fecha) con intento de contacto DURANTE el período
+        (
+          select count(distinct ca.lead_id)
+          from contact_attempts ca
+          join leads l on l.id = ca.lead_id
+          where l.assigned_to_id = h.id
+            and l.is_deleted = false
+            and ca.contacted_at between v_from and v_to
+            and (p_source is null or l.source = p_source)
+        ) as leads_with_contact,
+
+        -- C. Efectivos: leads con contacto EFECTIVO durante el período
+        (
+          select count(distinct ca.lead_id)
+          from contact_attempts ca
+          join leads l on l.id = ca.lead_id
+          where l.assigned_to_id = h.id
+            and l.is_deleted = false
+            and ca.result = 'EFECTIVO'
+            and ca.contacted_at between v_from and v_to
+            and (p_source is null or l.source = p_source)
+        ) as leads_with_effective,
+
+        -- OB: snapshot actual (no filtrado por período)
+        (
+          select count(distinct l.id)
+          from leads l
+          where l.assigned_to_id = h.id
+            and l.is_deleted = false
+            and l.current_stage = 'OB'
+            and (p_source is null or l.source = p_source)
+        ) as ob_count,
+
+        -- R2S: leads que ENTRARON a OK_R2S o VENTA durante el período
+        (
+          select count(distinct sh.lead_id)
+          from stage_history sh
+          join leads l on l.id = sh.lead_id
+          where l.assigned_to_id = h.id
+            and l.is_deleted = false
+            and sh.to_stage in ('OK_R2S', 'VENTA')
+            and sh.changed_at between v_from and v_to
+            and (p_source is null or l.source = p_source)
+        ) as r2s_count
+
+      from hunters h
     ),
     ranked as (
       select
         hs.*,
-        row_number() over (order by hs.productivity desc) as ranking
+        -- Productividad = R2S por día hábil del período
+        case when v_biz_days > 0
+          then round(hs.r2s_count::numeric / v_biz_days, 2)
+          else 0
+        end as r2s_per_day,
+        row_number() over (order by hs.r2s_count desc) as ranking
       from hunter_stats hs
     )
     select json_build_object(
-      'period', p_period,
-      'from',   v_from,
-      'to',     v_to,
+      'period',   p_period,
+      'from',     v_from,
+      'to',       v_to,
+      'bizDays',  v_biz_days,
       'totals', json_build_object(
         'totalLeads',                sum(total_leads),
         'leadsConTyc',               sum(leads_con_tyc),
         'leadsSinTyc',               sum(leads_sin_tyc),
         'leadsWithContactAttempt',   sum(leads_with_contact),
         'leadsWithEffectiveContact', sum(leads_with_effective),
-        'productivity',              sum(productivity),
-        'accumulatedTarget',         sum(daily_target * v_days),
         'obCount',                   sum(ob_count),
         'r2sCount',                  sum(r2s_count),
+        'productivity',              sum(r2s_count),
+        'accumulatedTarget',         sum(daily_target) * v_biz_days,
+        'gap',                       sum(r2s_count) - sum(daily_target) * v_biz_days,
         'contactabilityRate', case
           when sum(leads_with_contact) > 0
           then round(sum(leads_with_effective)::numeric / sum(leads_with_contact) * 100, 1)
-          else 0 end,
-        'gap', sum(productivity) - sum(daily_target * v_days)
+          else 0
+        end
       ),
       'team', coalesce((
         select json_agg(json_build_object(
@@ -240,7 +327,6 @@ begin
           'hunterName',                r.hunter_name,
           'hunterEmail',               r.hunter_email,
           'country',                   r.country,
-          'team',                      r.team,
           'ranking',                   r.ranking,
           'totalLeads',                r.total_leads,
           'leadsConTyc',               r.leads_con_tyc,
@@ -249,15 +335,18 @@ begin
           'leadsWithEffectiveContact', r.leads_with_effective,
           'contactabilityRate', case when r.leads_with_contact > 0
             then round(r.leads_with_effective::numeric / r.leads_with_contact * 100, 1)
-            else 0 end,
-          'productivity',              r.productivity,
-          'obCount',                   r.ob_count,
-          'r2sCount',                  r.r2s_count,
-          'accumulatedTarget',         r.daily_target * v_days,
-          'gap',                       r.productivity - (r.daily_target * v_days),
-          'phasing', case when (r.daily_target * v_days) > 0
-            then round(r.productivity::numeric / (r.daily_target * v_days) * 100, 1)
-            else 0 end
+            else 0
+          end,
+          'obCount',          r.ob_count,
+          'r2sCount',         r.r2s_count,
+          'productivity',     r.r2s_count,
+          'r2sPerDay',        r.r2s_per_day,
+          'accumulatedTarget', r.daily_target * v_biz_days,
+          'gap',              r.r2s_count - (r.daily_target * v_biz_days),
+          'phasing', case when (r.daily_target * v_biz_days) > 0
+            then round(r.r2s_count::numeric / (r.daily_target * v_biz_days) * 100, 1)
+            else 0
+          end
         ) order by r.ranking)
         from ranked r
       ), '[]')

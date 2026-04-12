@@ -20,6 +20,7 @@ const AssignPage        = lazy(() => import('./pages/AssignPage'))
 const ImportPage        = lazy(() => import('./pages/ImportPage'))
 const UsersPage         = lazy(() => import('./pages/UsersPage'))
 const FeedbackPage      = lazy(() => import('./pages/FeedbackPage'))
+const AuthCallbackPage  = lazy(() => import('./pages/AuthCallbackPage'))
 
 // ─── QueryClient ──────────────────────────────────────────────────────────────
 
@@ -84,22 +85,24 @@ function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 function AppRoutes() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
+  const defaultPath = (user?.role === 'HUNTER') ? '/leads' : '/gestion'
 
   return (
     <Suspense fallback={<PageFallback />}>
       <Routes>
         {/* Public */}
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route
           path="/login"
-          element={isAuthenticated ? <Navigate to="/gestion" replace /> : <LoginPage />}
+          element={isAuthenticated ? <Navigate to={defaultPath} replace /> : <LoginPage />}
         />
 
-        {/* Dashboard */}
+        {/* Dashboard — solo LIDER / ADMIN */}
         <Route
           path="/gestion"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['LIDER', 'ADMIN']}>
               <Layout><GestionPage /></Layout>
             </ProtectedRoute>
           }
@@ -208,8 +211,8 @@ function AppRoutes() {
         />
 
         {/* Defaults */}
-        <Route path="/" element={<Navigate to="/gestion" replace />} />
-        <Route path="*" element={<Navigate to="/gestion" replace />} />
+        <Route path="/" element={<Navigate to={defaultPath} replace />} />
+        <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Routes>
     </Suspense>
   )

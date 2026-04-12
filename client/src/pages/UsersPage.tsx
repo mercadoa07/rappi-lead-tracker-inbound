@@ -9,16 +9,15 @@ import { useAuth } from '../context/AuthContext'
 import { profilesApi } from '../services/api'
 import { cn } from '../utils/cn'
 import { COUNTRIES, COUNTRY_FLAG } from '../utils/constants'
-import type { User, Country, LeadSource, UserRole } from '../types'
+import type { User, Country, UserRole } from '../types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ROLES: UserRole[]      = ['HUNTER', 'LIDER', 'ADMIN']
-const TEAMS: LeadSource[]    = ['SDR', 'SOB']
+const ROLES: UserRole[] = ['HUNTER', 'LIDER', 'ADMIN']
 
 const ROLE_LABEL: Record<UserRole, string> = {
-  HUNTER: 'Hunter',
-  LIDER:  'Lider',
+  HUNTER: 'Comercial',
+  LIDER:  'Supervisor',
   ADMIN:  'Admin',
 }
 
@@ -28,18 +27,12 @@ const ROLE_COLOR: Record<UserRole, string> = {
   ADMIN:  'bg-rose-100 text-rose-700',
 }
 
-const TEAM_COLOR: Record<LeadSource, string> = {
-  SDR: 'bg-sky-100 text-sky-700',
-  SOB: 'bg-amber-100 text-amber-700',
-}
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface EditFormState {
   fullName:    string
   role:        UserRole
   country:     Country
-  team:        LeadSource
   dailyTarget: number
   leaderId:    string
   isActive:    boolean
@@ -51,7 +44,6 @@ interface CreateFormState {
   fullName:    string
   role:        UserRole
   country:     Country
-  team:        LeadSource
   dailyTarget: number
   leaderId:    string
 }
@@ -62,22 +54,12 @@ const DEFAULT_CREATE: CreateFormState = {
   fullName:    '',
   role:        'HUNTER',
   country:     'CO',
-  team:        'SDR',
   dailyTarget: 4,
   leaderId:    '',
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
-function useProfiles() {
-  return useQuery<User[]>({
-    queryKey: ['profiles'],
-    queryFn:  profilesApi.getAll,
-    staleTime: 30_000,
-  })
-}
-
-// Fetch all profiles regardless of is_active for the admin view
 function useAllProfiles() {
   return useQuery<User[]>({
     queryKey: ['profiles-all'],
@@ -103,7 +85,6 @@ function useUpdateProfile() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['profiles'] })
       qc.invalidateQueries({ queryKey: ['profiles-all'] })
-      qc.invalidateQueries({ queryKey: ['my-hunters-inbound'] })
     },
   })
 }
@@ -123,9 +104,7 @@ function useCreateProfile() {
 // ─── Edit modal ───────────────────────────────────────────────────────────────
 
 function EditModal({
-  user,
-  leaders,
-  onClose,
+  user, leaders, onClose,
 }: {
   user:    User
   leaders: User[]
@@ -135,12 +114,14 @@ function EditModal({
     fullName:    user.fullName,
     role:        user.role,
     country:     user.country,
-    team:        user.team,
     dailyTarget: user.dailyTarget,
     leaderId:    user.leaderId ?? '',
     isActive:    user.isActive,
   })
   const mutation = useUpdateProfile()
+
+  const set = <K extends keyof EditFormState>(key: K, val: EditFormState[K]) =>
+    setForm((prev) => ({ ...prev, [key]: val }))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -151,7 +132,6 @@ function EditModal({
           fullName:    form.fullName    || undefined,
           role:        form.role,
           country:     form.country,
-          team:        form.team,
           dailyTarget: form.dailyTarget,
           leaderId:    form.leaderId    || undefined,
           isActive:    form.isActive,
@@ -163,9 +143,6 @@ function EditModal({
       toast.error((err as Error)?.message ?? 'Error al actualizar perfil')
     }
   }
-
-  const set = <K extends keyof EditFormState>(key: K, val: EditFormState[K]) =>
-    setForm((prev) => ({ ...prev, [key]: val }))
 
   const availableLeaders = leaders.filter((l) => l.role === 'LIDER' || l.role === 'ADMIN')
 
@@ -187,7 +164,7 @@ function EditModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {/* Full name */}
+          {/* Nombre */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
               Nombre completo
@@ -200,7 +177,7 @@ function EditModal({
             />
           </div>
 
-          {/* Role */}
+          {/* Rol */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
               Rol
@@ -216,7 +193,7 @@ function EditModal({
             </select>
           </div>
 
-          {/* Country */}
+          {/* País */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
               País
@@ -232,36 +209,10 @@ function EditModal({
             </select>
           </div>
 
-          {/* Team */}
+          {/* Meta diaria */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
-              Team
-            </label>
-            <div className="flex gap-2">
-              {TEAMS.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => set('team', t)}
-                  className={cn(
-                    'flex-1 py-2 rounded-xl border-2 text-sm font-semibold transition-all',
-                    form.team === t
-                      ? t === 'SDR'
-                        ? 'border-sky-400 bg-sky-50 text-sky-700'
-                        : 'border-amber-400 bg-amber-50 text-amber-700'
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300',
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Daily target */}
-          <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
-              Meta diaria
+              Meta diaria (R2S)
             </label>
             <input
               type="number"
@@ -273,24 +224,24 @@ function EditModal({
             />
           </div>
 
-          {/* Leader */}
+          {/* Supervisor */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
-              Lider (opcional)
+              Supervisor (opcional)
             </label>
             <select
               value={form.leaderId}
               onChange={(e) => set('leaderId', e.target.value)}
               className="w-full h-9 px-3 rounded-xl border border-gray-medium text-sm text-dark bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
-              <option value="">Sin lider</option>
+              <option value="">Sin supervisor</option>
               {availableLeaders.map((l) => (
                 <option key={l.id} value={l.id}>{l.fullName} ({l.country})</option>
               ))}
             </select>
           </div>
 
-          {/* Active toggle */}
+          {/* Activo */}
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-dark">Activo</span>
             <button
@@ -301,9 +252,7 @@ function EditModal({
                 form.isActive ? 'text-success' : 'text-gray-400',
               )}
             >
-              {form.isActive
-                ? <ToggleRight size={24} />
-                : <ToggleLeft size={24} />}
+              {form.isActive ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
               {form.isActive ? 'Activo' : 'Inactivo'}
             </button>
           </div>
@@ -334,8 +283,7 @@ function EditModal({
 // ─── Create modal ─────────────────────────────────────────────────────────────
 
 function CreateModal({
-  leaders,
-  onClose,
+  leaders, onClose,
 }: {
   leaders: User[]
   onClose: () => void
@@ -348,18 +296,9 @@ function CreateModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.uuid.trim()) {
-      toast.error('Ingresa el UUID del usuario de Supabase Auth')
-      return
-    }
-    if (!form.email.trim()) {
-      toast.error('Ingresa el email del usuario')
-      return
-    }
-    if (!form.fullName.trim()) {
-      toast.error('Ingresa el nombre completo')
-      return
-    }
+    if (!form.uuid.trim())     { toast.error('Ingresa el UUID del usuario de Supabase Auth'); return }
+    if (!form.email.trim())    { toast.error('Ingresa el email del usuario'); return }
+    if (!form.fullName.trim()) { toast.error('Ingresa el nombre completo'); return }
     try {
       await mutation.mutateAsync({
         id:          form.uuid.trim(),
@@ -367,7 +306,6 @@ function CreateModal({
         fullName:    form.fullName.trim(),
         role:        form.role,
         country:     form.country,
-        team:        form.team,
         dailyTarget: form.dailyTarget,
         leaderId:    form.leaderId || undefined,
       })
@@ -397,13 +335,12 @@ function CreateModal({
           </button>
         </div>
 
-        {/* Instruction banner */}
         <div className="px-5 py-3 bg-amber-50 border-b border-amber-100 flex items-start gap-2 shrink-0">
           <Info size={14} className="text-amber-600 shrink-0 mt-0.5" />
           <p className="text-xs text-amber-800 leading-relaxed">
             El usuario debe existir en <strong>Supabase Auth</strong> antes de crear su perfil aquí.
-            Crea el usuario primero en <strong>Supabase Dashboard → Authentication → Users</strong>,
-            luego copia el UUID y pegalo abajo.
+            Crea el usuario en <strong>Supabase Dashboard → Authentication → Users</strong>,
+            luego copia el UUID y pégalo abajo.
           </p>
         </div>
 
@@ -436,7 +373,7 @@ function CreateModal({
             />
           </div>
 
-          {/* Full name */}
+          {/* Nombre */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
               Nombre completo <span className="text-danger">*</span>
@@ -450,7 +387,7 @@ function CreateModal({
             />
           </div>
 
-          {/* Role */}
+          {/* Rol */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
               Rol
@@ -466,7 +403,7 @@ function CreateModal({
             </select>
           </div>
 
-          {/* Country */}
+          {/* País */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
               País
@@ -482,36 +419,10 @@ function CreateModal({
             </select>
           </div>
 
-          {/* Team */}
+          {/* Meta diaria */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
-              Team
-            </label>
-            <div className="flex gap-2">
-              {TEAMS.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => set('team', t)}
-                  className={cn(
-                    'flex-1 py-2 rounded-xl border-2 text-sm font-semibold transition-all',
-                    form.team === t
-                      ? t === 'SDR'
-                        ? 'border-sky-400 bg-sky-50 text-sky-700'
-                        : 'border-amber-400 bg-amber-50 text-amber-700'
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300',
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Daily target */}
-          <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
-              Meta diaria
+              Meta diaria (R2S)
             </label>
             <input
               type="number"
@@ -523,17 +434,17 @@ function CreateModal({
             />
           </div>
 
-          {/* Leader */}
+          {/* Supervisor */}
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">
-              Lider (opcional)
+              Supervisor (opcional)
             </label>
             <select
               value={form.leaderId}
               onChange={(e) => set('leaderId', e.target.value)}
               className="w-full h-9 px-3 rounded-xl border border-gray-medium text-sm text-dark bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
-              <option value="">Sin lider</option>
+              <option value="">Sin supervisor</option>
               {availableLeaders.map((l) => (
                 <option key={l.id} value={l.id}>{l.fullName} ({l.country})</option>
               ))}
@@ -573,17 +484,14 @@ export default function UsersPage() {
   const [search,        setSearch]        = useState('')
   const [roleFilter,    setRoleFilter]    = useState<UserRole | ''>('')
   const [countryFilter, setCountryFilter] = useState<Country | ''>('')
-  const [teamFilter,    setTeamFilter]    = useState<LeadSource | ''>('')
   const [editingUser,   setEditingUser]   = useState<User | null>(null)
   const [showCreate,    setShowCreate]    = useState(false)
 
   const isAdmin = currentUser?.role === 'ADMIN'
 
-  // Filter users
   const filtered = allUsers.filter((u) => {
     if (roleFilter    && u.role    !== roleFilter)    return false
     if (countryFilter && u.country !== countryFilter) return false
-    if (teamFilter    && u.team    !== teamFilter)    return false
     if (search) {
       const q = search.toLowerCase()
       if (!u.fullName.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) return false
@@ -630,7 +538,7 @@ export default function UsersPage() {
             </span>
           </h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            Administra perfiles, roles, equipos y metas del equipo Inbound
+            Administra perfiles, roles y metas del equipo Inbound
           </p>
         </div>
         <button
@@ -644,7 +552,6 @@ export default function UsersPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
-        {/* Search */}
         <div className="relative flex-1 min-w-[180px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -664,7 +571,6 @@ export default function UsersPage() {
           )}
         </div>
 
-        {/* Role filter */}
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value as UserRole | '')}
@@ -676,7 +582,6 @@ export default function UsersPage() {
           ))}
         </select>
 
-        {/* Country filter */}
         <select
           value={countryFilter}
           onChange={(e) => setCountryFilter(e.target.value as Country | '')}
@@ -687,31 +592,9 @@ export default function UsersPage() {
             <option key={c} value={c}>{COUNTRY_FLAG[c]} {c}</option>
           ))}
         </select>
-
-        {/* Team filter */}
-        <div className="flex gap-1.5">
-          {(['' , 'SDR', 'SOB'] as (LeadSource | '')[]).map((t) => (
-            <button
-              key={t || 'all'}
-              onClick={() => setTeamFilter(t)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors',
-                teamFilter === t
-                  ? t === 'SDR'
-                    ? 'bg-sky-100 border-sky-400 text-sky-700'
-                    : t === 'SOB'
-                    ? 'bg-amber-100 border-amber-400 text-amber-700'
-                    : 'bg-primary/10 border-primary text-primary'
-                  : 'bg-white border-gray-medium text-gray-500 hover:border-gray-400',
-              )}
-            >
-              {t || 'Todos'}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Error state */}
+      {/* Error */}
       {error && (
         <div className="flex items-start gap-3 p-4 rounded-2xl bg-danger/5 border border-danger/20">
           <AlertCircle size={18} className="text-danger shrink-0 mt-0.5" />
@@ -722,16 +605,15 @@ export default function UsersPage() {
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-medium shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[820px]">
+          <table className="w-full text-sm min-w-[700px]">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Nombre</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Email</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Rol</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">País</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Team</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Meta</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Lider</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Supervisor</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Activo</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Acciones</th>
               </tr>
@@ -740,7 +622,7 @@ export default function UsersPage() {
               {isLoading
                 ? Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i} className="border-b border-gray-100 animate-pulse">
-                    {Array.from({ length: 9 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-3 bg-gray-200 rounded w-full" />
                       </td>
@@ -750,7 +632,7 @@ export default function UsersPage() {
                 : filtered.length === 0
                 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-sm text-gray-400">
+                    <td colSpan={8} className="py-12 text-center text-sm text-gray-400">
                       No se encontraron usuarios
                     </td>
                   </tr>
@@ -763,29 +645,16 @@ export default function UsersPage() {
                       !u.isActive && 'opacity-60',
                     )}
                   >
-                    <td className="px-4 py-3">
-                      <span className="font-semibold text-dark">{u.fullName}</span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[160px] truncate">
-                      {u.email}
-                    </td>
+                    <td className="px-4 py-3 font-semibold text-dark">{u.fullName}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[160px] truncate">{u.email}</td>
                     <td className="px-4 py-3">
                       <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold', ROLE_COLOR[u.role])}>
                         {ROLE_LABEL[u.role]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600">
-                      {COUNTRY_FLAG[u.country]} {u.country}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold', TEAM_COLOR[u.team])}>
-                        {u.team}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-600 font-mono">
-                      {u.dailyTarget}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[120px] truncate">
+                    <td className="px-4 py-3 text-xs text-gray-600">{COUNTRY_FLAG[u.country]} {u.country}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 font-mono">{u.dailyTarget}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[130px] truncate">
                       {u.leaderId ? (leaderMap[u.leaderId] ?? '—') : '—'}
                     </td>
                     <td className="px-4 py-3">
@@ -798,9 +667,7 @@ export default function UsersPage() {
                           u.isActive ? 'text-success hover:text-success/70' : 'text-gray-300 hover:text-gray-500',
                         )}
                       >
-                        {u.isActive
-                          ? <ToggleRight size={22} />
-                          : <ToggleLeft size={22} />}
+                        {u.isActive ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
                       </button>
                     </td>
                     <td className="px-4 py-3">
@@ -820,7 +687,6 @@ export default function UsersPage() {
         </div>
       </div>
 
-      {/* Modals */}
       {editingUser && (
         <EditModal
           user={editingUser}

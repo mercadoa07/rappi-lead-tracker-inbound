@@ -236,16 +236,6 @@ function SobMetricsPanel({ totals }: { totals: TeamSummaryResponse['totals'] | u
             </div>
           </div>
 
-          <div className="border-t border-gray-100 pt-2 flex justify-between text-sm">
-            <span className="text-gray-600 font-semibold">Meta acumulada</span>
-            <span className="font-bold text-dark">{totals.accumulatedTarget}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600 font-semibold">Gap vs meta</span>
-            <span className={cn('font-bold', totals.gap >= 0 ? 'text-success' : 'text-danger')}>
-              {totals.gap >= 0 ? '+' : ''}{totals.gap}
-            </span>
-          </div>
         </div>
       </div>
     </div>
@@ -499,7 +489,6 @@ export default function TeamDashboardPage() {
     queryKey: ['hunters', country, source],
     queryFn:  () => profilesApi.getHunters({
       country:  (country as Country) || undefined,
-      source:   sourceParam,
       leaderId: isLider ? user?.id : undefined,
     }),
     staleTime: 300_000,
@@ -739,25 +728,6 @@ export default function TeamDashboardPage() {
             />
 
             <Kpi
-              label="Meta acumulada"
-              value={totals?.accumulatedTarget ?? 0}
-              sub="objetivo del período"
-              color="text-gray-600"
-            />
-
-            <Kpi
-              label="Phasing"
-              value={`${((totals?.accumulatedTarget ?? 0) > 0 ? (((totals?.obCount ?? 0) + (totals?.r2sCount ?? 0)) / (totals?.accumulatedTarget ?? 1)) * 100 : 0).toFixed(1)}%`}
-              sub="avance vs meta"
-              color={
-                (totals?.accumulatedTarget ?? 0) > 0 &&
-                (((totals?.obCount ?? 0) + (totals?.r2sCount ?? 0)) / (totals?.accumulatedTarget ?? 1)) * 100 >= 100
-                  ? 'text-success'
-                  : 'text-warning'
-              }
-            />
-
-            <Kpi
               label="Tasa Contactabilidad"
               value={`${totals?.contactabilityRate?.toFixed(1) ?? '0.0'}%`}
               sub="contactos efectivos / asignados"
@@ -828,16 +798,6 @@ export default function TeamDashboardPage() {
                           {COUNTRY_FLAG[h.country as Country]} {h.country}
                         </td>
 
-                        {/* Team */}
-                        <td className="px-3 py-2.5">
-                          <span className={cn(
-                            'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold',
-                            h.team === 'SOB' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700',
-                          )}>
-                            {h.team}
-                          </span>
-                        </td>
-
                         {/* Asignados */}
                         <td className="px-3 py-2.5 text-sm font-semibold text-dark tabular-nums">
                           {h.totalLeads}
@@ -900,26 +860,6 @@ export default function TeamDashboardPage() {
                           {h.obCount + h.r2sCount}
                         </td>
 
-                        {/* Meta */}
-                        <td className="px-3 py-2.5 text-sm text-gray-500 tabular-nums">
-                          {h.accumulatedTarget}
-                        </td>
-
-                        {/* Gap */}
-                        <td className="px-3 py-2.5">
-                          <span className={cn(
-                            'text-sm font-bold tabular-nums',
-                            h.gap >= 0 ? 'text-success' : 'text-danger',
-                          )}>
-                            {h.gap >= 0 ? '+' : ''}{h.gap}
-                          </span>
-                        </td>
-
-                        {/* Phasing % */}
-                        <td className="px-3 py-2.5 min-w-[120px]">
-                          <PhasingBar value={h.phasing} />
-                        </td>
-
                         {/* Action */}
                         <td className="px-3 py-2.5 text-right">
                           <button
@@ -953,15 +893,6 @@ export default function TeamDashboardPage() {
                       <td className="px-3 py-3 text-sm font-bold text-indigo-600 tabular-nums">{totals.obCount}</td>
                       <td className="px-3 py-3 text-sm font-bold text-success tabular-nums">{totals.r2sCount}</td>
                       <td className="px-3 py-3 text-sm font-bold text-primary tabular-nums">{totals.obCount + totals.r2sCount}</td>
-                      <td className="px-3 py-3 text-sm font-bold text-gray-500 tabular-nums">{totals.accumulatedTarget}</td>
-                      <td className="px-3 py-3">
-                        <span className={cn(
-                          'text-sm font-bold tabular-nums',
-                          totals.gap >= 0 ? 'text-success' : 'text-danger',
-                        )}>
-                          {totals.gap >= 0 ? '+' : ''}{totals.gap}
-                        </span>
-                      </td>
                       <td className="px-3 py-3 text-sm text-gray-400">—</td>
                       <td />
                     </tr>

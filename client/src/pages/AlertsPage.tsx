@@ -17,22 +17,17 @@ import type { Alert, FunnelStage, User } from '../types'
 // ─── Stage badge ──────────────────────────────────────────────────────────────
 
 const STAGE_SHORT: Record<FunnelStage, string> = {
-  SIN_CONTACTO:                 'Sin Contacto',
-  CONTACTO_FALLIDO:             'C. Fallido',
-  CONTACTO_EFECTIVO:            'C. Efectivo',
-  EN_GESTION:                   'En Gestión',
-  PROPUESTA_ENVIADA:            'Prop. Enviada',
-  ESPERANDO_DOCUMENTOS:         'Esp. Docs',
-  EN_FIRMA:                     'En Firma',
-  OB:                           'OB',
-  OK_R2S:                       'OK R2S',
-  VENTA:                        'Venta',
-  BLOQUEADO_NO_INTERESA:        'No Interesa',
-  BLOQUEADO_IMPOSIBLE_CONTACTO: 'Imposible',
-  BLOQUEADO_FUERA_COBERTURA:    'Fuera Cob.',
-  BLOQUEADO_NO_RESTAURANTE:     'No Rest.',
-  BLOQUEADO_RESTAURANTE_CERRADO:'Cerrado',
-  BLOQUEADO_YA_EN_RAPPI:        'Ya en Rappi',
+  SIN_CONTACTO:         'Sin Contacto',
+  CONTACTO_FALLIDO:     'C. Fallido',
+  CONTACTO_EFECTIVO:    'C. Efectivo',
+  EN_GESTION:           'En Gestión',
+  PROPUESTA_ENVIADA:    'Prop. Enviada',
+  ESPERANDO_DOCUMENTOS: 'Esp. Docs',
+  EN_FIRMA:             'En Firma',
+  OB:                   'OB',
+  OK_R2S:               'OK R2S',
+  VENTA:                'Venta',
+  DESCARTADO:           'Descartado',
 }
 
 function stageBadgeClass(stage: FunnelStage): string {
@@ -44,7 +39,7 @@ function stageBadgeClass(stage: FunnelStage): string {
   if (stage === 'SIN_CONTACTO')      return 'bg-gray-100 text-gray-500'
   if (stage === 'ESPERANDO_DOCUMENTOS')
     return 'bg-yellow-50 text-yellow-700'
-  if ((stage as string).startsWith('BLOQUEADO')) return 'bg-danger/10 text-danger'
+  if (stage === 'DESCARTADO') return 'bg-danger/10 text-danger'
   return 'bg-gray-100 text-gray-500'
 }
 

@@ -135,7 +135,9 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   const alertCount       = useAlertCount()
 
   const navItems: NavItem[] = [
-    { to: '/gestion',  label: 'Gestión',     Icon: TrendingUp },
+    ...(user?.role === 'LIDER' || user?.role === 'ADMIN'
+      ? [{ to: '/gestion', label: 'Gestión', Icon: TrendingUp }]
+      : []),
     { to: '/leads',    label: 'Mis Leads',   Icon: Users      },
     { to: '/pipeline', label: 'Pipeline',    Icon: Columns3   },
     { to: '/ranking',  label: 'Ranking',     Icon: Trophy     },
@@ -240,11 +242,6 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
               </p>
               <div className="flex items-center gap-1.5">
                 <p className="text-xs text-white/40 truncate">{user?.email}</p>
-                {user?.team && (
-                  <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-white/10 text-white/60">
-                    {user.team}
-                  </span>
-                )}
               </div>
             </div>
             <button
@@ -269,7 +266,9 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
   const alertCount       = useAlertCount()
 
   const navItems: NavItem[] = [
-    { to: '/gestion',  label: 'Gestión',     Icon: TrendingUp },
+    ...(user?.role === 'LIDER' || user?.role === 'ADMIN'
+      ? [{ to: '/gestion', label: 'Gestión', Icon: TrendingUp }]
+      : []),
     { to: '/leads',    label: 'Mis Leads',   Icon: Users      },
     { to: '/pipeline', label: 'Pipeline',    Icon: Columns3   },
     { to: '/ranking',  label: 'Ranking',     Icon: Trophy     },
@@ -397,11 +396,6 @@ function Header({ onMobileMenuClick }: { onMobileMenuClick: () => void }) {
           {user?.role && (
             <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
               {user.role}
-            </span>
-          )}
-          {user?.team && (
-            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-info/10 text-info border border-info/20">
-              {user.team}
             </span>
           )}
           {user?.country && (

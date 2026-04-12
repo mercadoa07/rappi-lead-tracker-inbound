@@ -1,10 +1,11 @@
 /// <reference types="vite/client" />
-import { supabase, supabaseAdmin } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import { STAGE_TRANSITIONS } from '../utils/constants'
 import type {
   Lead, ContactAttempt, StageHistory, Alert, FunnelStage,
   ContactResult, Country, LeadSource, User, Reassignment,
   TeamSummaryResponse, ClosedRateEntry, HcSummaryEntry,
+  FunnelEntry, StageAdvanceEntry, DiscardReasonEntry,
 } from '../types'
 
 // ─── Phone cleaner ────────────────────────────────────────────────────────────
@@ -56,6 +57,7 @@ export function mapLead(row: any): Lead {
     tieneIntentoContacto:  row.tiene_intento_contacto  ?? false,
     tieneContactoEfectivo: row.tiene_contacto_efectivo ?? false,
     bloqueado:             row.bloqueado           ?? false,
+    motivoDescarte:        row.motivo_descarte     ?? undefined,
     negociacionExitosa:    row.negociacion_exitosa ?? false,
     ultimaFechaContacto:   row.ultima_fecha_contacto ?? undefined,
     reassignmentCount:     row.reassignment_count   ?? 0,
@@ -163,9 +165,12 @@ export const leadsApi = {
       .eq('is_deleted', false)
 
     if (filters.search) {
-      query = query.or(
-        `name.ilike.%${filters.search}%,lead_id_external.ilike.%${filters.search}%`,
-      )
+      const safe = filters.search.replace(/[,()*%\\:"']/g, ' ').trim()
+      if (safe) {
+        query = query.or(
+          `name.ilike.%${safe}%,lead_id_external.ilike.%${safe}%`,
+        )
+      }
     }
     if (filters.stage?.length) query = query.in('current_stage', filters.stage)
     if (filters.country)       query = query.eq('country', filters.country)
@@ -339,7 +344,7 @@ export const contactsApi = {
 // ─── stageApi ─────────────────────────────────────────────────────────────────
 
 export const stageApi = {
-  transitionStage: async (leadId: string, newStage: FunnelStage) => {
+  transitionStage: async (leadId: string, newStage: FunnelStage, motivoDescarte?: string) => {
     const { data: session } = await supabase.auth.getUser()
     const userId = session.user?.id
     if (!userId) throw new Error('Not authenticated')
@@ -352,7 +357,7 @@ export const stageApi = {
 
     if (leadErr || !lead) throw leadErr ?? new Error('Lead not found')
 
-    const isBloqueado = newStage.startsWith('BLOQUEADO')
+    const isDescartado = newStage === 'DESCARTADO'
 
     const { error: updateErr } = await supabase
       .from('leads')
@@ -360,7 +365,8 @@ export const stageApi = {
         current_stage:    newStage,
         stage_changed_at: new Date().toISOString(),
         fecha_estado:     new Date().toISOString(),
-        bloqueado:        isBloqueado,
+        bloqueado:        isDescartado,
+        motivo_descarte:  isDescartado ? (motivoDescarte ?? null) : null,
         negociacion_exitosa: ['OK_R2S', 'VENTA'].includes(newStage),
       })
       .eq('id', leadId)
@@ -433,19 +439,91 @@ export const reportsApi = {
   },
 
   getTeamSummary: async (
-    period:  string,
-    date:    string,
-    country?: string,
-    source?:  LeadSource,
+    period:    string,
+    date:      string,
+    country?:  string,
+    source?:   LeadSource,
+    hunterId?: string,
+    leaderId?: string,
+    dateFrom?: string,
+    dateTo?:   string,
   ): Promise<TeamSummaryResponse> => {
     const { data, error } = await supabase.rpc('get_team_summary', {
-      p_period:  period,
-      p_date:    date,
-      p_country: country ?? null,
-      p_source:  source  ?? null,
+      p_period:    period,
+      p_date:      date,
+      p_country:   country  ?? null,
+      p_source:    source   ?? null,
+      p_hunter_id: hunterId ?? null,
+      p_leader_id: leaderId ?? null,
+      p_date_from: dateFrom ?? null,
+      p_date_to:   dateTo   ?? null,
     })
     if (error) throw error
     return data as TeamSummaryResponse
+  },
+
+  getFunnelDistribution: async (
+    country?:  string,
+    source?:   LeadSource,
+    hunterId?: string,
+    leaderId?: string,
+  ): Promise<FunnelEntry[]> => {
+    const { data, error } = await supabase.rpc('get_funnel_distribution', {
+      p_country:   country  ?? null,
+      p_source:    source   ?? null,
+      p_hunter_id: hunterId ?? null,
+      p_leader_id: leaderId ?? null,
+    })
+    if (error) throw error
+    return (data ?? []) as FunnelEntry[]
+  },
+
+  getStageAdvances: async (
+    period:    string,
+    date:      string,
+    country?:  string,
+    source?:   LeadSource,
+    hunterId?: string,
+    leaderId?: string,
+    dateFrom?: string,
+    dateTo?:   string,
+  ): Promise<StageAdvanceEntry[]> => {
+    const { data, error } = await supabase.rpc('get_stage_advances', {
+      p_period:    period,
+      p_date:      date,
+      p_country:   country  ?? null,
+      p_source:    source   ?? null,
+      p_hunter_id: hunterId ?? null,
+      p_leader_id: leaderId ?? null,
+      p_date_from: dateFrom ?? null,
+      p_date_to:   dateTo   ?? null,
+    })
+    if (error) throw error
+    return (data ?? []) as StageAdvanceEntry[]
+  },
+
+  getDiscardReasons: async (
+    period:    string,
+    date:      string,
+    country?:  string,
+    source?:   LeadSource,
+    hunterId?: string,
+    leaderId?: string,
+    dateFrom?: string,
+    dateTo?:   string,
+  ): Promise<DiscardReasonEntry[]> => {
+    const { data, error } = await supabase.rpc('get_discard_reasons', {
+      p_period:    period,
+      p_date:      date,
+      p_country:   country  ?? null,
+      p_source:    source   ?? null,
+      p_hunter_id: hunterId ?? null,
+      p_leader_id: leaderId ?? null,
+      p_date_from: dateFrom ?? null,
+      p_date_to:   dateTo   ?? null,
+    })
+    if (error) throw error
+    return (data ?? []) as DiscardReasonEntry[]
   },
 
   getClosedRateReport: async (
@@ -564,7 +642,7 @@ export const profilesApi = {
     return (data ?? []).map(mapProfile)
   },
 
-  getHunters: async (filters?: { country?: Country; source?: LeadSource; leaderId?: string }) => {
+  getHunters: async (filters?: { country?: Country; leaderId?: string }) => {
     let query = supabase
       .from('profiles')
       .select('*')
@@ -573,8 +651,22 @@ export const profilesApi = {
       .order('full_name')
 
     if (filters?.country)  query = query.eq('country', filters.country)
-    if (filters?.source)   query = query.eq('team', filters.source)
     if (filters?.leaderId) query = query.eq('leader_id', filters.leaderId)
+
+    const { data, error } = await query
+    if (error) throw error
+    return (data ?? []).map(mapProfile)
+  },
+
+  getLiders: async (country?: Country) => {
+    let query = supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'LIDER')
+      .eq('is_active', true)
+      .order('full_name')
+
+    if (country) query = query.eq('country', country)
 
     const { data, error } = await query
     if (error) throw error
@@ -587,24 +679,18 @@ export const profilesApi = {
     fullName:    string
     role:        string
     country:     Country
-    team:        LeadSource
     dailyTarget: number
     leaderId?:   string
   }) => {
-    const { data, error } = await supabaseAdmin
-      .from('profiles')
-      .insert({
-        id:           payload.id,
-        email:        payload.email,
-        full_name:    payload.fullName,
-        role:         payload.role,
-        country:      payload.country,
-        team:         payload.team,
-        daily_target: payload.dailyTarget,
-        leader_id:    payload.leaderId ?? null,
-      })
-      .select()
-      .single()
+    const { data, error } = await supabase.rpc('admin_create_profile', {
+      p_id:           payload.id,
+      p_email:        payload.email,
+      p_full_name:    payload.fullName,
+      p_role:         payload.role,
+      p_country:      payload.country,
+      p_daily_target: payload.dailyTarget,
+      p_leader_id:    payload.leaderId ?? null,
+    })
     if (error) throw error
     return mapProfile(data)
   },
@@ -613,7 +699,6 @@ export const profilesApi = {
     fullName?:    string
     role?:        string
     country?:     Country
-    team?:        LeadSource
     dailyTarget?: number
     leaderId?:    string
     isActive?:    boolean
@@ -622,7 +707,6 @@ export const profilesApi = {
     if (patch.fullName    !== undefined) snakePatch.full_name    = patch.fullName
     if (patch.role        !== undefined) snakePatch.role         = patch.role
     if (patch.country     !== undefined) snakePatch.country      = patch.country
-    if (patch.team        !== undefined) snakePatch.team         = patch.team
     if (patch.dailyTarget !== undefined) snakePatch.daily_target = patch.dailyTarget
     if (patch.leaderId    !== undefined) snakePatch.leader_id    = patch.leaderId
     if (patch.isActive    !== undefined) snakePatch.is_active    = patch.isActive
@@ -642,7 +726,7 @@ export const profilesApi = {
     if (hunterIds.length === 0 || leadIds.length === 0) return
 
     const perHunter = Math.ceil(leadIds.length / hunterIds.length)
-    const updates: PromiseLike<unknown>[] = []
+    const updates: Promise<unknown>[] = []
     let idx = 0
 
     for (const hunterId of hunterIds) {
@@ -651,22 +735,29 @@ export const profilesApi = {
       if (batch.length === 0) break
 
       updates.push(
-        supabase
-          .from('leads')
-          .update({
-            assigned_to_id: hunterId,
-            assigned_at:    new Date().toISOString(),
-          })
-          .in('id', batch)
-          .then(() => undefined),
+        Promise.resolve(
+          supabase
+            .from('leads')
+            .update({
+              assigned_to_id: hunterId,
+              assigned_at:    new Date().toISOString(),
+            })
+            .in('id', batch)
+        ).then(({ error }) => {
+          if (error) throw error
+        }),
       )
     }
 
-    await Promise.all(updates)
+    const results = await Promise.allSettled(updates)
+    const failed  = results.filter((r) => r.status === 'rejected')
+    if (failed.length > 0) {
+      throw new Error(`${failed.length} batch(es) de asignación fallaron`)
+    }
   },
 }
 
-// ─── importApi (usa supabaseAdmin para bypassear RLS) ────────────────────────
+// ─── importApi ───────────────────────────────────────────────────────────────
 
 export const importApi = {
   upsertLeads: async (rows: Record<string, unknown>[]) => {
@@ -677,17 +768,12 @@ export const importApi = {
 
     for (let i = 0; i < rows.length; i += BATCH) {
       const batch = rows.slice(i, i + BATCH)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (supabaseAdmin
-        .from('leads')
-        .upsert(batch, { onConflict: 'lead_id_external', ignoreDuplicates: false }) as any)
-      const { error } = result
-
+      const { data, error } = await supabase.rpc('admin_upsert_leads', { p_rows: batch })
       if (error) {
         errors.push(`Batch ${Math.floor(i / BATCH) + 1}: ${error.message}`)
         skipped += batch.length
       } else {
-        imported += batch.length
+        imported += (data?.imported ?? batch.length)
       }
     }
 
@@ -695,9 +781,7 @@ export const importApi = {
   },
 
   upsertProfiles: async (rows: Record<string, unknown>[]) => {
-    const { error } = await supabaseAdmin
-      .from('profiles')
-      .upsert(rows, { onConflict: 'email', ignoreDuplicates: false })
+    const { error } = await supabase.rpc('admin_upsert_profiles', { p_rows: rows })
     if (error) throw error
   },
 }

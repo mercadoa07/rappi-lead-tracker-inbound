@@ -15,10 +15,8 @@ import type { Country, FunnelStage, LeadSource, Lead, User as UserType } from '.
 
 const FUNNEL_STAGES: FunnelStage[] = [
   'SIN_CONTACTO', 'CONTACTO_FALLIDO', 'CONTACTO_EFECTIVO',
-  'PROPUESTA_ENVIADA', 'ESPERANDO_DOCUMENTOS', 'OB', 'OK_R2S',
-  'BLOQUEADO_NO_INTERESA', 'BLOQUEADO_IMPOSIBLE_CONTACTO',
-  'BLOQUEADO_FUERA_COBERTURA', 'BLOQUEADO_NO_RESTAURANTE',
-  'BLOQUEADO_RESTAURANTE_CERRADO', 'BLOQUEADO_YA_EN_RAPPI',
+  'EN_GESTION', 'PROPUESTA_ENVIADA', 'ESPERANDO_DOCUMENTOS',
+  'EN_FIRMA', 'OB', 'OK_R2S', 'DESCARTADO',
 ]
 
 // ─── Source Toggle ────────────────────────────────────────────────────────────
@@ -62,7 +60,7 @@ function stageBadgeClass(stage: FunnelStage): string {
   if (stage === 'SIN_CONTACTO')      return 'bg-gray-100 text-gray-500 border-gray-200'
   if (stage === 'ESPERANDO_DOCUMENTOS')
     return 'bg-yellow-50 text-yellow-700 border-yellow-200'
-  if ((stage as string).startsWith('BLOQUEADO'))
+  if (stage === 'DESCARTADO')
     return 'bg-danger/10 text-danger border-danger/20'
   return 'bg-gray-100 text-gray-500 border-gray-200'
 }
@@ -384,7 +382,7 @@ export default function HunterDetailPage() {
                         'h-2 rounded-full transition-all',
                         (stage === 'OK_R2S' || stage === 'VENTA') ? 'bg-success' :
                         stage === 'OB' ? 'bg-indigo-500' :
-                        (stage as string).startsWith('BLOQUEADO') ? 'bg-danger' :
+                        stage === 'DESCARTADO' ? 'bg-danger' :
                         'bg-primary',
                       )}
                       style={{ width: `${pct}%` }}

@@ -6,3 +6,10 @@ client/dist/
 .env.local
 *.local
 .DS_Store
+
+# Data files con PII — nunca commitear
+*.csv
+profiles_source.json
+
+# Scripts con service_role key — solo correr localmente
+scripts/
